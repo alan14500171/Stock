@@ -132,6 +132,9 @@
 <!-- 添加股票管理模块 -->
 <script src="{{ url_for('static', filename='js/stock-module.js') }}"></script>
 
+<!-- 添加交易表单控制模块 -->
+<script src="{{ url_for('static', filename='js/transaction-form.js') }}"></script>
+
 <style>
 /* Select2 样式优化 */
 .select2-container--default .select2-selection--single {
@@ -607,9 +610,6 @@ async function submitForm(action) {
         document.getElementById('transactionForm').dataset.submitting = 'false';
     }
 }
-
-// 初始化添加一行交易明细
-addTradeDetail();
 
 // 添加交易编号输入框的失焦事件处理
 document.getElementById('transaction_code').addEventListener('blur', async function() {
