@@ -21,19 +21,9 @@
                             <label for="stock_code" class="form-label">股票代码</label>
                             <div class="position-relative">
                                 <input type="text" class="form-control" id="stock_code" name="stock_code" 
-                                       placeholder="输入代码或名称搜索" autocomplete="off" required>
-                                <input type="hidden" id="market" name="market">
-                                <div id="stock_suggestions" class="position-absolute w-100 mt-1 d-none" 
-                                     style="z-index: 1000; max-height: 200px; overflow-y: auto;">
-                                </div>
-                                <div class="spinner-border spinner-border-sm text-primary position-absolute d-none" 
-                                     style="right: 10px; top: 10px;" id="searchSpinner" role="status">
-                                    <span class="visually-hidden">搜索中...</span>
-                                </div>
-                                <div id="selected_stock_info" class="selected-stock-info d-none">
-                                    <span class="selected-stock-code"></span>
-                                    <span class="selected-stock-name text-muted"></span>
-                                </div>
+                                       placeholder="输入代码或名称搜索" autocomplete="off" required
+                                       data-stock-code-control>
+                                <input type="hidden" id="market" name="market" value="HK">
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -251,363 +241,80 @@
 </style>
 
 <script>
-// 提交表单
-function submitForm() {
-    document.getElementById('transactionForm').submit();
-}
-
-// 设置日期默认值为当天
-function setDefaultDate() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    document.getElementById('transaction_date').value = `${year}-${month}-${day}`;
-}
-
-// 日期快速输入处理
-function handleDateInput(event) {
-    const input = event.target;
-    const value = input.value;
-    
-    // 处理快速输入，例如: 20250103 => 2025-01-03
-    if (value.length === 8 && !value.includes('-')) {
-        const year = value.substring(0, 4);
-        const month = value.substring(4, 6);
-        const day = value.substring(6, 8);
-        input.value = `${year}-${month}-${day}`;
-    }
-}
-
-// 处理股票代码格式化
-function formatStockCode(code, market) {
-    if (!code) return '';
-    
-    // 移除所有非数字字符
-    code = code.replace(/\D/g, '');
-    
-    if (market === 'HK') {
-        // 港股代码统一格式：4位数字，不足前面补0
-        return code.padStart(4, '0');
-    }
-    
-    return code;
-}
-
-// 股票代码输入处理
-let searchTimeout;
-let currentSuggestionIndex = -1;
-
-document.getElementById('stock_code').addEventListener('input', function() {
-    const input = this;
-    const code = input.value.trim();
-    const suggestionsContainer = document.getElementById('stock_suggestions');
-    
-    clearTimeout(searchTimeout);
-    currentSuggestionIndex = -1;
-    
-    if (!code) {
-        suggestionsContainer.classList.add('d-none');
-        return;
-    }
-    
-    // 显示加载状态
-    document.getElementById('searchSpinner').classList.remove('d-none');
-    
-    searchTimeout = setTimeout(async () => {
-        try {
-            const response = await fetch(`/api/stock/search?keyword=${code}`);
-            const result = await response.json();
-            
-            if (result.success && result.data.length > 0) {
-                // 显示建议列表
-                suggestionsContainer.innerHTML = result.data.map(stock => `
-                    <div class="suggestion-item" data-code="${stock.code}" data-market="${stock.market}" data-name="${stock.name}">
-                        <div>
-                            <span class="stock-code">${stock.code}</span>
-                            <span class="stock-name">${stock.name}</span>
-                        </div>
-                        <span class="stock-market">${stock.market}</span>
-                    </div>
-                `).join('');
-                
-                suggestionsContainer.classList.remove('d-none');
-                
-                // 绑定建议项点击事件
-                suggestionsContainer.querySelectorAll('.suggestion-item').forEach(item => {
-                    item.addEventListener('click', function() {
-                        selectSuggestion(this);
-                    });
-                });
-            } else {
-                suggestionsContainer.classList.add('d-none');
-            }
-        } catch (error) {
-            console.error('搜索股票失败:', error);
-            suggestionsContainer.classList.add('d-none');
-        } finally {
-            // 隐藏加载状态
-            document.getElementById('searchSpinner').classList.add('d-none');
-        }
-    }, 300);
-});
-
-// 键盘导航处理
-document.getElementById('stock_code').addEventListener('keydown', function(e) {
-    const suggestionsContainer = document.getElementById('stock_suggestions');
-    const suggestions = suggestionsContainer.querySelectorAll('.suggestion-item');
-    
-    if (suggestions.length === 0 || suggestionsContainer.classList.contains('d-none')) {
-        return;
-    }
-    
-    switch (e.key) {
-        case 'ArrowDown':
-            e.preventDefault();
-            currentSuggestionIndex = Math.min(currentSuggestionIndex + 1, suggestions.length - 1);
-            updateSuggestionHighlight(suggestions);
-            ensureVisibleSuggestion(suggestions[currentSuggestionIndex], suggestionsContainer);
-            break;
-            
-        case 'ArrowUp':
-            e.preventDefault();
-            currentSuggestionIndex = Math.max(currentSuggestionIndex - 1, 0);
-            updateSuggestionHighlight(suggestions);
-            ensureVisibleSuggestion(suggestions[currentSuggestionIndex], suggestionsContainer);
-            break;
-            
-        case 'Enter':
-            e.preventDefault();
-            if (currentSuggestionIndex >= 0 && currentSuggestionIndex < suggestions.length) {
-                selectSuggestion(suggestions[currentSuggestionIndex]);
-            }
-            break;
-            
-        case 'Escape':
-            e.preventDefault();
-            suggestionsContainer.classList.add('d-none');
-            currentSuggestionIndex = -1;
-            break;
-    }
-});
-
-// 更新建议项高亮状态
-function updateSuggestionHighlight(suggestions) {
-    suggestions.forEach((item, index) => {
-        if (index === currentSuggestionIndex) {
-            item.classList.add('active');
-        } else {
-            item.classList.remove('active');
-        }
-    });
-}
-
-// 确保当前选中的建议项在可视区域内
-function ensureVisibleSuggestion(element, container) {
-    if (!element) return;
-    
-    const containerRect = container.getBoundingClientRect();
-    const elementRect = element.getBoundingClientRect();
-    
-    if (elementRect.bottom > containerRect.bottom) {
-        container.scrollTop += elementRect.bottom - containerRect.bottom;
-    } else if (elementRect.top < containerRect.top) {
-        container.scrollTop -= containerRect.top - elementRect.top;
-    }
-}
-
-// 选择建议项
-function selectSuggestion(item) {
-    const input = document.getElementById('stock_code');
-    const suggestionsContainer = document.getElementById('stock_suggestions');
-    const selectedCode = item.dataset.code;
-    const selectedMarket = item.dataset.market;
-    const selectedName = item.dataset.name;
-    
-    // 设置选中的值
-    input.value = selectedCode;
-    document.getElementById('market').value = selectedMarket;
-    
-    // 显示选中的股票信息
-    const stockInfo = document.getElementById('selected_stock_info');
-    stockInfo.classList.remove('d-none');
-    stockInfo.querySelector('.selected-stock-code').textContent = selectedCode;
-    stockInfo.querySelector('.selected-stock-name').textContent = selectedName;
-    
-    // 隐藏建议列表并重置索引
-    suggestionsContainer.classList.add('d-none');
-    currentSuggestionIndex = -1;
-    
-    // 将焦点移动到下一个输入框
-    document.getElementById('transaction_code').focus();
-}
-
-// 点击其他地方时隐藏建议列表
-document.addEventListener('click', function(e) {
-    const suggestionsContainer = document.getElementById('stock_suggestions');
-    const stockCodeInput = document.getElementById('stock_code');
-    
-    if (!stockCodeInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
-        suggestionsContainer.classList.add('d-none');
-        currentSuggestionIndex = -1;
-    }
-});
-
-// 交易编号输入事件 - 自动判断买卖类型
-document.getElementById('transaction_code').addEventListener('input', function() {
-    const code = this.value.trim().toUpperCase();
-    const typeSelect = document.getElementById('transaction_type');
-    
-    if (code.startsWith('P')) {
-        typeSelect.value = 'BUY';
-    } else if (code.startsWith('S')) {
-        typeSelect.value = 'SELL';
-    }
-});
-
-// 添加成交明细行
-function addTradeDetail() {
-    const container = document.getElementById('trade-details');
-    const newDetail = document.createElement('div');
-    newDetail.className = 'row mb-2 trade-detail';
-    newDetail.innerHTML = `
-        <div class="col-md-5">
-            <label class="form-label">数量</label>
-            <input type="number" class="form-control quantity-input" name="quantities[]" min="1" required>
-        </div>
-        <div class="col-md-5">
-            <label class="form-label">价格</label>
-            <input type="number" class="form-control price-input" name="prices[]" step="0.001" min="0" required>
-        </div>
-        <div class="col-md-2 d-flex align-items-end">
-            <button type="button" class="btn btn-outline-danger btn-sm delete-detail" onclick="deleteTradeDetail(this)">
-                <i class="bi bi-trash"></i> 删除
-            </button>
-        </div>
-    `;
-    container.appendChild(newDetail);
-    
-    // 获取新添加的输入框
-    const newQuantityInput = newDetail.querySelector('.quantity-input');
-    const newPriceInput = newDetail.querySelector('.price-input');
-    
-    // 绑定键盘事件
-    bindTradeDetailEvents(newQuantityInput, newPriceInput);
-    
-    // 自动聚焦到新添加的数量输入框
-    newQuantityInput.focus();
-}
-
-// 绑定成交明细的键盘事件
-function bindTradeDetailEvents(quantityInput, priceInput) {
-    // 数量输入框事件
-    quantityInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            priceInput.focus();
-        }
-    });
-    
-    // 价格输入框事件
-    priceInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('broker_fee').focus();
-        } else if (e.key === 'Tab' && !e.shiftKey) {
-            e.preventDefault();
-            document.getElementById('addDetailBtn').focus();
-        }
-    });
-}
-
-// 删除成交明细行
-function deleteTradeDetail(button) {
-    const detailRow = button.closest('.trade-detail');
-    const container = document.getElementById('trade-details');
-    
-    if (container.children.length > 1) {
-        detailRow.remove();
-    } else {
-        // 如果是最后一行，清空输入值
-        const quantityInput = detailRow.querySelector('.quantity-input');
-        const priceInput = detailRow.querySelector('.price-input');
-        quantityInput.value = '';
-        priceInput.value = '';
-        quantityInput.focus();
-    }
-}
-
-// 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 绑定事件监听器
-    document.getElementById('transaction_date').addEventListener('input', handleDateInput);
-    
-    // 设置费用输入框的键盘事件
-    const feeInputs = [
-        'broker_fee', 'transaction_levy', 'stamp_duty',
-        'trading_fee', 'deposit_fee'
-    ];
-    
-    feeInputs.forEach((id, index) => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (id === 'deposit_fee') {
-                    // 存入证券费按回车跳转到保存并添加下一条按钮
-                    document.querySelector('button[value="save_and_add"]').focus();
-                } else {
-                    // 其他费用输入框按回车跳转到下一个费用输入框
-                    const nextInput = document.getElementById(feeInputs[index + 1]);
-                    if (nextInput) nextInput.focus();
-                }
-            } else if (e.key === 'Tab' && !e.shiftKey) {
-                e.preventDefault();
-                if (id === 'deposit_fee') {
-                    // 存入证券费按Tab跳转到保存按钮
-                    document.querySelector('button[value="save"]').focus();
-                }
-            }
-        });
-    });
-    
-    // 初始化第一行成交明细的键盘事件
-    const firstDetail = document.querySelector('.trade-detail');
-    if (firstDetail) {
-        const quantityInput = firstDetail.querySelector('.quantity-input');
-        const priceInput = firstDetail.querySelector('.price-input');
-        bindTradeDetailEvents(quantityInput, priceInput);
+    // 设置日期默认值为当天
+    function setDefaultDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        document.getElementById('transaction_date').value = `${year}-${month}-${day}`;
     }
-    
-    // 设置保存按钮的点击事件
-    document.querySelector('button[type="submit"]').addEventListener('click', function(e) {
-        e.preventDefault();
-        submitForm();
+    setDefaultDate();
+
+    // 日期快速输入处理
+    document.getElementById('transaction_date').addEventListener('input', function(event) {
+        const value = this.value;
+        if (value.length === 8 && !value.includes('-')) {
+            const year = value.substring(0, 4);
+            const month = value.substring(4, 6);
+            const day = value.substring(6, 8);
+            this.value = `${year}-${month}-${day}`;
+        }
     });
-    
-    // 阻止表单默认提交
-    document.getElementById('transactionForm').addEventListener('submit', function(e) {
-        e.preventDefault();
+
+    // 交易编号自动判断买卖类型
+    document.getElementById('transaction_code').addEventListener('input', function() {
+        const code = this.value.trim().toUpperCase();
+        const typeSelect = document.getElementById('transaction_type');
+        
+        if (code.startsWith('P')) {
+            typeSelect.value = 'BUY';
+        } else if (code.startsWith('S')) {
+            typeSelect.value = 'SELL';
+        }
     });
-    
-    // 为所有输入框添加回车键处理
-    document.querySelectorAll('input:not([readonly])').forEach(input => {
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                // 根据输入框类型处理回车键
-                if (input.classList.contains('quantity-input')) {
-                    input.closest('.trade-detail').querySelector('.price-input').focus();
-                } else if (input.classList.contains('price-input')) {
-                    document.getElementById('broker_fee').focus();
-                } else if (input.id === 'transaction_date') {
-                    document.getElementById('transaction_code').focus();
-                } else if (input.id === 'transaction_code') {
-                    document.querySelector('.quantity-input').focus();
-                }
+
+    // 提交表单
+    document.querySelectorAll('button[type="submit"]').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const form = document.getElementById('transactionForm');
+            const action = this.value;
+            
+            // 验证表单
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
             }
+            
+            // 提交表单
+            const formData = new FormData(form);
+            formData.append('action', action);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    if (action === 'save') {
+                        window.location.href = '{{ url_for("stock.list") }}';
+                    } else {
+                        // 重置表单
+                        form.reset();
+                        setDefaultDate();
+                        // 聚焦到交易编号输入框
+                        document.getElementById('transaction_code').focus();
+                    }
+                } else {
+                    alert('保存失败：' + result.error);
+                }
+            })
+            .catch(error => {
+                alert('保存失败：' + error);
+            });
         });
     });
 });
