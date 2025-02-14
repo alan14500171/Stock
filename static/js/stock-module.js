@@ -108,6 +108,17 @@ const StockModule = {
             }
         });
 
+        // 添加失焦事件
+        codeInput.addEventListener('blur', () => {
+            const code = codeInput.value.trim();
+            const market = marketSelect.value;
+            
+            if (code) {
+                clearTimeout(queryTimeout);
+                this.queryStockInfoWithFallback(market, code);
+            }
+        });
+
         // 市场选择变更事件
         marketSelect.addEventListener('change', () => {
             const code = codeInput.value.trim();
@@ -135,7 +146,52 @@ const StockModule = {
         this.modalInstance = new bootstrap.Modal(modal);
     },
 
-    // 查询股票信息
+    // 查询股票信息（带自动添加功能）
+    async queryStockInfoWithFallback(market, code) {
+        try {
+            // 显示加载状态
+            document.getElementById('currentPrice').value = '查询中...';
+            
+            const response = await fetch(`/api/stock/info?market=${market}&code=${code}`);
+            const result = await response.json();
+            
+            if (result.success && result.data.name) {
+                // 找到股票信息，更新显示
+                document.getElementById('stockName').value = result.data.name || '';
+                document.getElementById('googleCode').value = result.data.google_code || '';
+                document.getElementById('currentPrice').value = result.data.current_price ? 
+                    `${result.data.current_price} ${market === 'HK' ? 'HKD' : 'USD'}` : '暂无数据';
+                document.getElementById('submitStock').disabled = false;
+            } else {
+                // 未找到股票信息，打开添加股票模态框
+                this.resetStockInfo();
+                document.getElementById('submitStock').disabled = true;
+                
+                // 打开添加股票模态框
+                StockModule.open(market, code, (stockInfo) => {
+                    // 添加成功后的回调
+                    if (stockInfo) {
+                        // 更新主界面的股票信息
+                        const mainStockCode = document.querySelector('#stock_code');
+                        const mainMarket = document.querySelector('#market');
+                        if (mainStockCode && mainMarket) {
+                            mainStockCode.value = stockInfo.code;
+                            mainMarket.value = stockInfo.market;
+                            // 触发change事件以更新其他相关字段
+                            const event = new Event('change', { bubbles: true });
+                            mainStockCode.dispatchEvent(event);
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('查询股票信息失败:', error);
+            this.resetStockInfo();
+            document.getElementById('submitStock').disabled = true;
+        }
+    },
+
+    // 查询股票信息（原方法保持不变，用于模态框内部使用）
     async queryStockInfo(market, code) {
         try {
             // 显示加载状态
