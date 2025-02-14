@@ -77,63 +77,32 @@ def calculate_stats(transactions):
             'total_amount': trans.total_amount,
             'total_fees': trans.total_fees,
             'exchange_rate': trans.exchange_rate,
-            'average_price': trans.average_price,
+            'avg_price': trans.average_price,
             'net_amount': trans.net_amount,
             'net_amount_hkd': trans.net_amount_hkd,
             'details': []
         }
         
         # 计算每笔成交的均价和盈亏
-        running_quantity = stock['current_quantity']
-        running_avg_cost = stock['avg_cost']
-        
         if trans.transaction_type == 'BUY':
-            # 买入时计算新的均价
-            total_cost = trans.total_amount + trans.total_fees
-            new_quantity = running_quantity + trans.total_quantity
-            if new_quantity > 0:
-                new_avg_cost = ((running_quantity * running_avg_cost) + total_cost) / new_quantity
-            else:
-                new_avg_cost = 0
-                
-            stock['current_quantity'] = new_quantity
-            stock['avg_cost'] = new_avg_cost
             stock['total_buy'] += trans.total_amount
-            stock['total_buy_with_fees'] += total_cost
+            stock['total_buy_with_fees'] += (trans.total_amount + trans.total_fees)
             stock['total_buy_quantity'] += trans.total_quantity
-            
+            stock['current_quantity'] += trans.total_quantity
             market_stats[market]['total_buy'] += trans.total_amount
-            
-            # 记录买入均价
-            trans_detail['avg_price'] = new_avg_cost
-            trans_detail['profit'] = 0
-            trans_detail['profit_rate'] = 0
-            
         else:  # SELL
-            # 卖出时计算盈亏
-            sell_amount = trans.total_amount - trans.total_fees
-            cost_basis = running_avg_cost * trans.total_quantity
-            profit = sell_amount - cost_basis
-            
-            stock['current_quantity'] -= trans.total_quantity
             stock['total_sell'] += trans.total_amount
-            stock['realized_profit'] += profit
-            
+            stock['current_quantity'] -= trans.total_quantity
             market_stats[market]['total_sell'] += trans.total_amount
-            market_stats[market]['realized_profit'] += profit
             
-            # 记录卖出盈亏
-            trans_detail['avg_price'] = running_avg_cost
-            trans_detail['profit'] = profit
-            trans_detail['profit_rate'] = (profit / cost_basis * 100) if cost_basis > 0 else 0
+            # 计算已实现盈亏
+            realized_profit = trans.net_amount_hkd
+            stock['realized_profit'] += realized_profit
+            market_stats[market]['realized_profit'] += realized_profit
         
-        # 添加成交明细
-        for detail in trans.details:
-            trans_detail['details'].append({
-                'quantity': detail.quantity,
-                'price': detail.price,
-                'amount': detail.amount
-            })
+        # 计算均价
+        if stock['total_buy_quantity'] > 0:
+            stock['avg_cost'] = stock['total_buy_with_fees'] / stock['total_buy_quantity']
         
         stock['transactions'].append(trans_detail)
     
@@ -141,16 +110,29 @@ def calculate_stats(transactions):
     stock_list = [(s['market'], code) for code, s in stock_stats.items() if s['current_quantity'] > 0]
     current_prices = get_multiple_quotes(stock_list)
     
+    # 获取当前汇率
+    today = datetime.now().strftime('%Y-%m-%d')
+    usd_rate = get_exchange_rate('USD', today)
+    if not usd_rate:
+        print(f"警告：无法获取 {today} 的美元汇率，将跳过美股市值计算")
+    
     for code, stock in stock_stats.items():
         if stock['current_quantity'] > 0 and code in current_prices:
             quote = current_prices[code]
+            if not quote:
+                print(f"警告：无法获取 {code} 的当前价格")
+                continue
+                
             stock['current_price'] = quote['price']
             
             # 计算持仓市值（转换为港币）
             if quote['market'] == 'HK':
                 market_value = quote['price'] * stock['current_quantity']
             else:  # USA
-                market_value = quote['price'] * stock['current_quantity'] * quote.get('exchange_rate', 1)
+                if not usd_rate:
+                    print(f"警告：由于缺少汇率，跳过 {code} 的市值计算")
+                    continue
+                market_value = quote['price'] * stock['current_quantity'] * usd_rate
             
             stock['market_value'] = market_value
             market_stats[stock['market']]['market_value'] += market_value
@@ -167,7 +149,7 @@ def calculate_stats(transactions):
     # 计算市场维度的总盈亏和盈亏率
     for market in market_stats:
         stats = market_stats[market]
-        stats['total_profit'] = stats['realized_profit']  # 已实现盈亏
+        stats['total_profit'] = stats['realized_profit'] + stats['market_value'] - stats['total_buy']
         if stats['total_buy'] > 0:
             stats['profit_rate'] = stats['total_profit'] / stats['total_buy'] * 100
     
@@ -202,28 +184,57 @@ def get_stock_symbol(code, market):
 def get_stock_price(code, market):
     """获取单个股票的实时价格"""
     try:
-        # 构建谷歌金融URL
-        if market == 'HK':
-            url = f'https://www.google.com/finance/quote/{code}:HKG'
-        else:  # USA
-            url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
-        
+        # 从数据库获取股票信息
+        stock = Stock.query.filter_by(code=code, market=market).first()
+        if not stock:
+            print(f"数据库中未找到股票: {market} {code}")
+            return None
+            
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         }
         
+        url = None
+        if stock.full_name:  # 优先使用保存的谷歌查询代码
+            url = f'https://www.google.com/finance/quote/{stock.full_name}'
+        else:
+            if market == 'HK':
+                # 港股代码需要补足4位
+                padded_code = code.zfill(4)
+                url = f'https://www.google.com/finance/quote/{padded_code}:HKG'
+            else:
+                # 尝试不同的交易所
+                exchanges = ['NASDAQ', 'NYSE']
+                for exchange in exchanges:
+                    try:
+                        test_url = f'https://www.google.com/finance/quote/{code}:{exchange}'
+                        print(f"尝试访问URL: {test_url}")
+                        response = requests.get(test_url, headers=headers, timeout=10)
+                        if response.status_code == 200:
+                            soup = BeautifulSoup(response.text, 'html.parser')
+                            price_div = soup.find('div', {'data-last-price': True})
+                            if price_div and price_div.get('data-last-price'):
+                                url = test_url
+                                break
+                    except:
+                        continue
+                
+                if not url:
+                    # 如果都失败了，默认使用NASDAQ
+                    url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
+        
+        print(f"最终访问URL: {url}")
+        
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 查找价格元素
         price_div = soup.find('div', {'data-last-price': True})
+        
         if price_div and price_div.get('data-last-price'):
-            price = float(price_div['data-last-price'])
-            
+            price = float(price_div.get('data-last-price'))
             return {
                 'code': code,
                 'market': market,
@@ -232,11 +243,11 @@ def get_stock_price(code, market):
                 'timestamp': datetime.now()
             }
             
-        print(f"未找到 {code} 的价格数据")
+        print("未能从页面解析到股价数据")
         return None
         
     except Exception as e:
-        print(f"获取 {code} 价格失败: {str(e)}")
+        print(f"获取股价失败: {str(e)}")
         return None
 
 def get_multiple_quotes(stock_list):

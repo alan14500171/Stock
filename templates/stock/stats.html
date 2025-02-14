@@ -159,7 +159,9 @@
                                     {% if trans.transaction_type == 'BUY' %}
                                         {{ "{:,.2f}".format(trans.total_amount) }}
                                         <br>
-                                        <small class="text-muted">均价: {{ "{:.3f}".format(trans.avg_price) }}</small>
+                                        {% if trans.avg_price is not none %}
+                                        <small class="text-muted">均价: {{ "%.3f"|format(trans.avg_price) }}</small>
+                                        {% endif %}
                                     {% else %}
                                         -
                                     {% endif %}
