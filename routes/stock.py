@@ -1037,4 +1037,20 @@ def search_stocks():
     return jsonify({
         'success': True,
         'data': results
-    }) 
+    })
+
+@stock_bp.route('/stock/check_transaction_code')
+@login_required
+def check_transaction_code():
+    """检查交易编号是否已存在"""
+    code = request.args.get('code')
+    if not code:
+        return jsonify({'exists': False})
+    
+    # 检查当前用户是否已有该交易编号的记录
+    exists = StockTransaction.query.filter_by(
+        user_id=session['user_id'],
+        transaction_code=code
+    ).first() is not None
+    
+    return jsonify({'exists': exists}) 

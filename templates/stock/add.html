@@ -125,6 +125,10 @@
 <!-- 添加 Bootstrap Icons -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
 
+<!-- 添加 Toastify -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
 <!-- 添加股票管理模块 -->
 <script src="{{ url_for('static', filename='js/stock-module.js') }}"></script>
 
@@ -377,44 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // 提交表单
-            const formData = new FormData(form);
-            
-            // 处理费用字段的空值
-            const feeFields = ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'];
-            feeFields.forEach(field => {
-                const value = formData.get(field);
-                if (!value || value.trim() === '') {
-                    formData.set(field, '0');
-                }
-            });
-            
-            formData.append('action', action);
-            
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('网络响应不正确');
-                }
-                return response.json();
-            })
-            .then(result => {
-                if (result.success) {
-                    if (result.message) {
-                        alert(result.message);
-                    }
-                    if (result.redirect) {
-                        window.location.href = result.redirect;
-                    }
-                } else {
-                    alert('保存失败：' + result.error);
-                }
-            })
-            .catch(error => {
-                alert('保存失败：' + error);
-            });
+            submitForm(action);
         });
     });
 });
@@ -468,5 +435,179 @@ function deleteTradeDetail(button) {
         quantityInput.focus();
     }
 }
+
+// 提交表单
+async function submitForm(action) {
+    const form = document.getElementById('transactionForm');
+    
+    // 检查表单是否正在提交
+    if (form.dataset.submitting === 'true') {
+        return;
+    }
+    
+    // 标记表单正在提交
+    form.dataset.submitting = 'true';
+    
+    try {
+        const formData = new FormData(form);
+        formData.append('action', action);
+        
+        // 检查并处理空费用字段
+        const feeFields = ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'];
+        feeFields.forEach(field => {
+            let value = formData.get(field);
+            // 处理所有可能的空值情况
+            if (value === null || value === undefined || value === '' || value.trim() === '') {
+                value = '0';
+            }
+            // 确保值是有效的数字
+            value = parseFloat(value) || 0;
+            // 将处理后的值设置回表单数据
+            formData.set(field, value.toString());
+            // 同时更新输入框的值
+            const input = document.getElementById(field);
+            if (input) {
+                input.value = value.toString();
+            }
+        });
+        
+        // 检查交易明细
+        const quantities = formData.getAll('quantities[]');
+        const prices = formData.getAll('prices[]');
+        if (!quantities.length || !prices.length) {
+            throw new Error('请至少添加一条交易明细');
+        }
+        
+        // 验证必填字段
+        const requiredFields = ['transaction_date', 'stock_code', 'transaction_code', 'transaction_type'];
+        for (const field of requiredFields) {
+            const value = formData.get(field);
+            if (!value || value.trim() === '') {
+                throw new Error(`请填写${document.querySelector(`label[for="${field}"]`)?.textContent || field}`);
+            }
+        }
+        
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData
+        });
+        
+        // 检查响应类型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            // 如果不是JSON响应，可能是会话过期
+            Toastify({
+                text: "会话可能已过期，请刷新页面重试",
+                duration: 3000,
+                gravity: "top",
+                position: 'right',
+                backgroundColor: "#f44336"
+            }).showToast();
+            
+            // 如果是会话过期，重定向到登录页面
+            if (response.redirected || response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            throw new Error('服务器返回了非JSON响应');
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            if (action === 'save_and_add') {
+                // 保存当前市场选择
+                const currentMarket = document.getElementById('market').value;
+                
+                // 显示成功提示
+                Toastify({
+                    text: "保存成功",
+                    duration: 1000,
+                    gravity: "top",
+                    position: 'right',
+                    backgroundColor: "#4caf50",
+                    callback: function() {
+                        // 重置表单
+                        form.reset();
+                        
+                        // 恢复市场选择
+                        document.getElementById('market').value = currentMarket;
+                        
+                        // 重新添加一行交易明细
+                        const container = document.getElementById('trade-details');
+                        container.innerHTML = '';
+                        addTradeDetail();
+                        
+                        // 设置当前日期
+                        setDefaultDate();
+                        
+                        // 确保日期输入框获得焦点
+                        setTimeout(() => {
+                            const dateInput = document.getElementById('transaction_date');
+                            dateInput.focus();
+                            dateInput.select();
+                        }, 100);
+                    }
+                }).showToast();
+            } else {
+                // 显示成功提示并跳转
+                Toastify({
+                    text: "保存成功",
+                    duration: 1000,
+                    gravity: "top",
+                    position: 'right',
+                    backgroundColor: "#4caf50",
+                    callback: function() {
+                        window.location.href = '/stock/list';
+                    }
+                }).showToast();
+            }
+        } else {
+            Toastify({
+                text: "保存失败：" + result.error,
+                duration: 3000,
+                gravity: "top",
+                position: 'right',
+                backgroundColor: "#f44336"
+            }).showToast();
+        }
+    } catch (error) {
+        console.error('提交表单时出错:', error);
+        Toastify({
+            text: "保存失败：" + (error.message || '请刷新页面重试'),
+            duration: 3000,
+            gravity: "top",
+            position: 'right',
+            backgroundColor: "#f44336"
+        }).showToast();
+    } finally {
+        // 重置表单提交状态
+        form.dataset.submitting = 'false';
+    }
+}
+
+// 添加交易编号输入框的失焦事件处理
+document.getElementById('transaction_code').addEventListener('blur', async function() {
+    const code = this.value.trim();
+    if (code) {
+        try {
+            const response = await fetch(`/stock/check_transaction_code?code=${encodeURIComponent(code)}`);
+            const result = await response.json();
+            if (result.exists) {
+                Toastify({
+                    text: "交易编号已存在，请使用其他编号",
+                    duration: 3000,
+                    gravity: "top",
+                    position: 'right',
+                    backgroundColor: "#f44336"
+                }).showToast();
+                this.focus();
+            }
+        } catch (error) {
+            console.error('检查交易编号时出错:', error);
+        }
+    }
+});
 </script>
 {% endblock %} 
