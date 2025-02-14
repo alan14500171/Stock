@@ -175,7 +175,7 @@
                                     {% if trans.transaction_type == 'SELL' %}
                                         {{ "{:,.2f}".format(trans.total_amount) }}
                                         <br>
-                                        <small class="text-muted">@ {{ "{:.3f}".format(trans.average_price) }}</small>
+                                        <small class="text-muted">@ {{ "%.3f"|format(trans.average_price) if trans.average_price is not none else '-' }}</small>
                                     {% else %}
                                         -
                                     {% endif %}
