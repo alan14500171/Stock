@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}交易记录{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">交易记录列表</h4>
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#searchForm">
+                <i class="fas fa-search"></i> 搜索
+            </button>
+            <a href="{{ url_for('stock.add') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus"></i> 添加记录
+            </a>
+        </div>
+    </div>
+
+    <!-- 搜索表单 -->
+    <div class="collapse" id="searchForm">
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small">开始日期</label>
+                    <input type="text" class="form-control form-control-sm" name="start_date" 
+                           value="{{ request.args.get('start_date', '') }}"
+                           placeholder="YYYY-MM-DD">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">结束日期</label>
+                    <input type="text" class="form-control form-control-sm" name="end_date" 
+                           value="{{ request.args.get('end_date', '') }}"
+                           placeholder="YYYY-MM-DD">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">股票代码</label>
+                    <select class="form-select form-select-sm" name="stock_codes" id="stockCodesSelect" multiple>
+                        {% for code in all_stock_codes %}
+                        <option value="{{ code }}" {% if code in selected_stock_codes %}selected{% endif %}>{{ code }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">查询</button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{{ url_for('stock.list') }}" class="btn btn-sm btn-outline-secondary w-100">重置</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        {% if transactions %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr class="small">
+                        <th>日期</th>
+                        <th>市场</th>
+                        <th>股票代码</th>
+                        <th>交易编号</th>
+                        <th>买卖</th>
+                        <th>成交明细</th>
+                        <th>汇率</th>
+                        <th class="text-end">总金额</th>
+                        <th class="text-end">港币总金额</th>
+                        <th class="text-end">经纪佣金</th>
+                        <th class="text-end">交易征费</th>
+                        <th class="text-end">印花税</th>
+                        <th class="text-end">交易费</th>
+                        <th class="text-end">存入证券费</th>
+                        <th class="text-end">手续费</th>
+                        <th class="text-end">净金额</th>
+                        <th class="text-end">港币净金额</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody class="small">
+                    {% for transaction in transactions %}
+                    <tr>
+                        <td>{{ transaction.transaction_date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ transaction.market }}</td>
+                        <td>{{ transaction.stock_code }}
+                            {% if stock_names.get(transaction.stock_code) %}
+                            <small class="text-muted ms-1">{{ stock_names[transaction.stock_code] }}</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ transaction.transaction_code }}</td>
+                        <td>
+                            {% if transaction.transaction_type == 'BUY' %}
+                            <span class="badge bg-danger">买入</span>
+                            {% else %}
+                            <span class="badge bg-success">卖出</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% for detail in transaction.details %}
+                            <div>{{ detail.quantity }}股 @ {{ "%.3f"|format(detail.price) }}</div>
+                            {% endfor %}
+                        </td>
+                        <td>{{ "%.3f"|format(transaction.exchange_rate) if transaction.exchange_rate else '-' }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.total_amount) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.total_amount_hkd) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.broker_fee) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.transaction_levy) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.stamp_duty) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.trading_fee) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.deposit_fee) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.total_fees) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.net_amount) }}</td>
+                        <td class="text-end">{{ "%.2f"|format(transaction.net_amount_hkd) }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('stock.edit', id=transaction.id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{{ url_for('stock.delete', id=transaction.id) }}" class="btn btn-outline-danger btn-sm" 
+                                   onclick="return confirm('确定要删除这条记录吗？')">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <p class="text-muted">暂无交易记录</p>
+            <a href="{{ url_for('stock.add') }}" class="btn btn-primary btn-sm">添加第一条记录</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 添加 Font Awesome 图标 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+<!-- 添加 Select2 样式和脚本 -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('#stockCodesSelect').select2({
+        placeholder: '选择股票代码',
+        allowClear: true,
+        width: '100%'
+    });
+});
+</script>
+{% endblock %} 

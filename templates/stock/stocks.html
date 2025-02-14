@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}股票管理{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">股票管理</h4>
+        <button type="button" class="btn btn-primary" id="addStockBtn">
+            添加股票
+        </button>
+    </div>
+    <div class="card-body">
+        <!-- 查询表单 -->
+        <form id="searchForm" class="mb-4">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">市场</label>
+                    <select class="form-select" name="market">
+                        <option value="">--</option>
+                        <option value="HK" {% if request.args.get('market') == 'HK' %}selected{% endif %}>HK</option>
+                        <option value="USA" {% if request.args.get('market') == 'USA' %}selected{% endif %}>USA</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">搜索</label>
+                    <input type="text" class="form-control" name="keyword" 
+                           value="{{ request.args.get('keyword', '') }}"
+                           placeholder="输入代码、名称搜索">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">查询</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- 股票列表 -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>市场</th>
+                        <th>代码</th>
+                        <th>名称</th>
+                        <th>谷歌查询代码</th>
+                        <th>当前股价</th>
+                        <th>更新时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stock in stocks %}
+                    <tr data-code="{{ stock.code }}" data-market="{{ stock.market }}">
+                        <td>{{ stock.market }}</td>
+                        <td>{{ stock.code }}</td>
+                        <td>
+                            <span class="stock-value">{{ stock.name }}</span>
+                            <div class="input-group d-none stock-edit">
+                                <input type="text" class="form-control form-control-sm" value="{{ stock.name }}">
+                                <button class="btn btn-sm btn-success save-stock" data-id="{{ stock.id }}">
+                                    <i class="bi bi-check"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary cancel-edit">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="google-code-value">{{ stock.full_name or '' }}</span>
+                            <div class="input-group d-none google-code-edit">
+                                <input type="text" class="form-control form-control-sm" value="{{ stock.full_name or '' }}">
+                                <button class="btn btn-sm btn-success save-google-code" data-id="{{ stock.id }}">
+                                    <i class="bi bi-check"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary cancel-edit">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td class="current-price">-</td>
+                        <td>{{ stock.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary edit-stock">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                                <button class="btn btn-outline-danger delete-stock" data-id="{{ stock.id }}">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 添加 Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+
+<!-- 添加股票管理模块 -->
+<script src="{{ url_for('static', filename='js/stock-module.js') }}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 添加股票按钮点击事件
+    document.getElementById('addStockBtn').addEventListener('click', function() {
+        StockModule.open('HK', '', () => {
+            // 添加成功后刷新页面
+            location.reload();
+        });
+    });
+
+    // 编辑按钮点击事件
+    document.querySelectorAll('.edit-stock').forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            row.querySelector('.stock-value').classList.add('d-none');
+            row.querySelector('.stock-edit').classList.remove('d-none');
+            row.querySelector('.google-code-value').classList.add('d-none');
+            row.querySelector('.google-code-edit').classList.remove('d-none');
+            this.classList.add('d-none');
+        });
+    });
+
+    // 取消编辑事件
+    document.querySelectorAll('.cancel-edit').forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            row.querySelector('.stock-value').classList.remove('d-none');
+            row.querySelector('.stock-edit').classList.add('d-none');
+            row.querySelector('.google-code-value').classList.remove('d-none');
+            row.querySelector('.google-code-edit').classList.add('d-none');
+            row.querySelector('.edit-stock').classList.remove('d-none');
+        });
+    });
+
+    // 保存股票名称事件
+    document.querySelectorAll('.save-stock').forEach(button => {
+        button.addEventListener('click', async function() {
+            const row = this.closest('tr');
+            const stockId = this.dataset.id;
+            const name = row.querySelector('.stock-edit input').value;
+            const fullName = row.querySelector('.google-code-edit input').value;
+            
+            try {
+                const response = await fetch(`/stocks/edit/${stockId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `name=${encodeURIComponent(name)}&full_name=${encodeURIComponent(fullName)}`
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // 更新显示的值
+                    row.querySelector('.stock-value').textContent = name;
+                    row.querySelector('.google-code-value').textContent = fullName;
+                    
+                    // 切换回显示状态
+                    row.querySelector('.stock-value').classList.remove('d-none');
+                    row.querySelector('.stock-edit').classList.add('d-none');
+                    row.querySelector('.google-code-value').classList.remove('d-none');
+                    row.querySelector('.google-code-edit').classList.add('d-none');
+                    row.querySelector('.edit-stock').classList.remove('d-none');
+                    
+                    alert('更新成功');
+                } else {
+                    alert('更新失败：' + result.error);
+                }
+            } catch (error) {
+                alert('更新失败：' + error);
+            }
+        });
+    });
+
+    // 删除股票事件
+    document.querySelectorAll('.delete-stock').forEach(button => {
+        button.addEventListener('click', async function() {
+            if (!confirm('确定要删除这支股票吗？')) {
+                return;
+            }
+            
+            const stockId = this.dataset.id;
+            
+            try {
+                const response = await fetch(`/stocks/delete/${stockId}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // 删除成功后刷新页面
+                    location.reload();
+                } else {
+                    alert('删除失败：' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败：' + error);
+            }
+        });
+    });
+
+    // 页面加载时获取一次股价
+    updateStockPrices();
+});
+
+// 更新股价函数
+async function updateStockPrices() {
+    try {
+        const response = await fetch('/api/stock/prices');
+        const result = await response.json();
+        
+        if (result.success) {
+            result.data.forEach(stock => {
+                const row = document.querySelector(`tr[data-code="${stock.code}"]`);
+                if (row) {
+                    const priceCell = row.querySelector('.current-price');
+                    if (priceCell) {
+                        const market = row.getAttribute('data-market');
+                        priceCell.textContent = stock.current_price ? 
+                            `${stock.current_price} ${market === 'HK' ? 'HKD' : 'USD'}` : '-';
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('更新股价失败:', error);
+    }
+}
+</script>
+{% endblock %} 

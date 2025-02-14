@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}编辑交易记录{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">编辑交易记录</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" id="transactionForm" onsubmit="return false">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">交易日期</label>
+                            <input type="text" class="form-control" name="transaction_date" id="transaction_date" required 
+                                   placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}"
+                                   value="{{ transaction.transaction_date.strftime('%Y-%m-%d') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="market" class="form-label">市场</label>
+                            <input type="text" class="form-control" value="{{ transaction.market }}" readonly>
+                            <input type="hidden" name="market" value="{{ transaction.market }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="stock_code" class="form-label">股票代码</label>
+                            <input type="text" class="form-control" value="{{ transaction.stock_code }}" readonly>
+                            <input type="hidden" name="stock_code" value="{{ transaction.stock_code }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="transaction_code" class="form-label">交易编号</label>
+                            <input type="text" class="form-control" value="{{ transaction.transaction_code }}" readonly>
+                            <input type="hidden" name="transaction_code" value="{{ transaction.transaction_code }}">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="transaction_type" class="form-label">买卖</label>
+                            <input type="text" class="form-control" value="{{ '买入' if transaction.transaction_type == 'BUY' else '卖出' }}" readonly>
+                            <input type="hidden" name="transaction_type" value="{{ transaction.transaction_type }}">
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">成交明细</h5>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addTradeDetail()" id="addDetailBtn">添加成交记录</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="trade-details">
+                                {% for detail in transaction.details %}
+                                <div class="row mb-2 trade-detail">
+                                    <div class="col-md-5">
+                                        <label class="form-label">数量</label>
+                                        <input type="number" class="form-control quantity-input" name="quantities[]" 
+                                               min="1" required value="{{ detail.quantity }}">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label">价格</label>
+                                        <input type="number" class="form-control price-input" name="prices[]" 
+                                               step="0.001" min="0" required value="{{ "%.3f"|format(detail.price) }}">
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button type="button" class="btn btn-outline-danger btn-sm delete-detail" onclick="deleteTradeDetail(this)">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5 class="mb-0">费用明细</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="broker_fee" class="form-label">经纪佣金</label>
+                                    <input type="number" class="form-control" id="broker_fee" name="broker_fee" 
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.broker_fee) }}">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="transaction_levy" class="form-label">交易征费</label>
+                                    <input type="number" class="form-control" id="transaction_levy" name="transaction_levy" 
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.transaction_levy) }}">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="stamp_duty" class="form-label">印花税</label>
+                                    <input type="number" class="form-control" id="stamp_duty" name="stamp_duty" 
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.stamp_duty) }}">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="trading_fee" class="form-label">交易费</label>
+                                    <input type="number" class="form-control" id="trading_fee" name="trading_fee" 
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.trading_fee) }}">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="deposit_fee" class="form-label">存入证券费</label>
+                                    <input type="number" class="form-control" id="deposit_fee" name="deposit_fee" 
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.deposit_fee) }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{{ url_for('stock.list') }}" class="btn btn-outline-secondary">取消</a>
+                        <button type="submit" class="btn btn-primary">保存修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 设置日期默认值为当天
+function setDefaultDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    document.getElementById('transaction_date').value = `${year}-${month}-${day}`;
+}
+
+// 日期快速输入处理
+function handleDateInput(event) {
+    const input = event.target;
+    const value = input.value;
+    
+    // 处理快速输入，例如: 20250103 => 2025-01-03
+    if (value.length === 8 && !value.includes('-')) {
+        const year = value.substring(0, 4);
+        const month = value.substring(4, 6);
+        const day = value.substring(6, 8);
+        input.value = `${year}-${month}-${day}`;
+    }
+}
+
+// 提交表单
+function submitForm() {
+    document.getElementById('transactionForm').submit();
+}
+
+// 添加成交明细行
+function addTradeDetail() {
+    const container = document.getElementById('trade-details');
+    const newDetail = document.createElement('div');
+    newDetail.className = 'row mb-2 trade-detail';
+    newDetail.innerHTML = `
+        <div class="col-md-5">
+            <label class="form-label">数量</label>
+            <input type="number" class="form-control quantity-input" name="quantities[]" min="1" required>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label">价格</label>
+            <input type="number" class="form-control price-input" name="prices[]" step="0.001" min="0" required>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-danger btn-sm delete-detail" onclick="deleteTradeDetail(this)">
+                <i class="bi bi-trash"></i> 删除
+            </button>
+        </div>
+    `;
+    container.appendChild(newDetail);
+    
+    // 获取新添加的输入框
+    const newQuantityInput = newDetail.querySelector('.quantity-input');
+    const newPriceInput = newDetail.querySelector('.price-input');
+    
+    // 绑定键盘事件
+    bindTradeDetailEvents(newQuantityInput, newPriceInput);
+    
+    // 自动聚焦到新添加的数量输入框
+    newQuantityInput.focus();
+}
+
+// 绑定成交明细的键盘事件
+function bindTradeDetailEvents(quantityInput, priceInput) {
+    // 数量输入框事件
+    quantityInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            priceInput.focus();
+        }
+    });
+    
+    // 价格输入框事件
+    priceInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('broker_fee').focus();
+        } else if (e.key === 'Tab' && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById('addDetailBtn').focus();
+        }
+    });
+}
+
+// 删除成交明细行
+function deleteTradeDetail(button) {
+    const detailRow = button.closest('.trade-detail');
+    const container = document.getElementById('trade-details');
+    
+    if (container.children.length > 1) {
+        detailRow.remove();
+    } else {
+        // 如果是最后一行，清空输入值
+        const quantityInput = detailRow.querySelector('.quantity-input');
+        const priceInput = detailRow.querySelector('.price-input');
+        quantityInput.value = '';
+        priceInput.value = '';
+        quantityInput.focus();
+    }
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 绑定事件监听器
+    document.getElementById('transaction_date').addEventListener('input', handleDateInput);
+    
+    // 设置费用输入框的键盘事件
+    const feeInputs = [
+        'broker_fee', 'transaction_levy', 'stamp_duty',
+        'trading_fee', 'clearing_fee', 'deposit_fee'
+    ];
+    
+    feeInputs.forEach((id, index) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (id === 'deposit_fee') {
+                    // 存入证券费按回车跳转到保存按钮
+                    document.querySelector('button[type="submit"]').focus();
+                } else {
+                    // 其他费用输入框按回车跳转到下一个费用输入框
+                    const nextInput = document.getElementById(feeInputs[index + 1]);
+                    if (nextInput) nextInput.focus();
+                }
+            } else if (e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault();
+                if (id === 'broker_fee') {
+                    // 经纪佣金按Tab跳转到保存按钮
+                    document.querySelector('button[type="submit"]').focus();
+                } else if (id === 'deposit_fee') {
+                    // 存入证券费按Tab跳转到取消按钮
+                    document.querySelector('a.btn-outline-secondary').focus();
+                }
+            }
+        });
+    });
+    
+    // 初始化第一行成交明细的键盘事件
+    const firstDetail = document.querySelector('.trade-detail');
+    if (firstDetail) {
+        const quantityInput = firstDetail.querySelector('.quantity-input');
+        const priceInput = firstDetail.querySelector('.price-input');
+        bindTradeDetailEvents(quantityInput, priceInput);
+    }
+    
+    // 设置保存按钮的点击事件
+    document.querySelector('button[type="submit"]').addEventListener('click', function(e) {
+        e.preventDefault();
+        submitForm();
+    });
+    
+    // 阻止表单默认提交
+    document.getElementById('transactionForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+    });
+    
+    // 为所有输入框添加回车键处理
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+            }
+        });
+    });
+});
+</script>
+
+<!-- 添加 Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+{% endblock %} 
