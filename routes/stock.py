@@ -123,11 +123,13 @@ def calculate_stats(transactions):
             'total_amount': trans.total_amount,
             'total_fees': trans.total_fees,
             'exchange_rate': trans.exchange_rate,
-            'avg_price': trans.average_price,  # 原始购买价格
-            'fifo_price': fifo_price,     # FIFO均价（含费用）
+            'average_price': trans.average_price,
+            'fifo_price': fifo_price,
             'net_amount': trans.net_amount,
             'net_amount_hkd': trans.net_amount_hkd,
-            'details': []
+            'details': [],
+            'profit': trans.net_amount_hkd if trans.transaction_type == 'SELL' else None,
+            'profit_rate': ((trans.average_price / fifo_price - 1) * 100) if trans.transaction_type == 'SELL' and fifo_price > 0 else None
         }
         
         # 更新股票统计数据
