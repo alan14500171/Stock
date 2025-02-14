@@ -68,7 +68,7 @@
                                 <th class="text-end" style="width: 60px">数量</th>
                                 <th class="text-end" style="width: 50px">笔数</th>
                                 <th class="text-end" style="width: 100px">买入总额</th>
-                                <th class="text-end" style="width: 80px">均价</th>
+                                <th class="text-end" style="width: 80px">平均价格</th>
                                 <th class="text-end" style="width: 100px">卖出总额</th>
                                 <th class="text-end" style="width: 80px">费用</th>
                                 <th class="text-end" style="width: 100px">盈亏</th>
@@ -154,23 +154,21 @@
                                     </span>
                                     <small class="text-muted">{{ trans.transaction_code }}</small>
                                 </td>
-                                <td class="text-end small">{{ trans.total_quantity }}股</td>
+                                <td class="text-end small">{{ trans.total_quantity }}股{% if trans.avg_price is not none %}@{{ "%.3f"|format(trans.avg_price) }}{% endif %}</td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'BUY' %}
                                         {{ "{:,.2f}".format(trans.total_amount) }}
                                         <br>
-                                        {% if trans.avg_price is not none %}
-                                        <small class="text-muted">均价: {{ "%.3f"|format(trans.avg_price) }}</small>
-                                        {% endif %}
+                                        <small class="text-muted">均价成本: {{ "%.3f"|format(trans.fifo_price) if trans.fifo_price is not none else '-' }}</small>
                                     {% else %}
                                         -
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'BUY' %}
-                                        {{ "{:.3f}".format(trans.avg_price) }}
+                                        {{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}
                                     {% else %}
-                                        {{ "{:.3f}".format(trans.avg_price) }}
+                                        {{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">

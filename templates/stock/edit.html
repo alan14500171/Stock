@@ -82,29 +82,29 @@
                                 <div class="col-md-4 mb-3">
                                     <label for="broker_fee" class="form-label">经纪佣金</label>
                                     <input type="number" class="form-control" id="broker_fee" name="broker_fee" 
-                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.broker_fee) if transaction.broker_fee != 0 }}">
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.broker_fee) }}">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="transaction_levy" class="form-label">交易征费</label>
                                     <input type="number" class="form-control" id="transaction_levy" name="transaction_levy" 
-                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.transaction_levy) if transaction.transaction_levy != 0 }}">
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.transaction_levy) }}">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="stamp_duty" class="form-label">印花税</label>
                                     <input type="number" class="form-control" id="stamp_duty" name="stamp_duty" 
-                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.stamp_duty) if transaction.stamp_duty != 0 }}">
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.stamp_duty) }}">
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="trading_fee" class="form-label">交易费</label>
                                     <input type="number" class="form-control" id="trading_fee" name="trading_fee" 
-                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.trading_fee) if transaction.trading_fee != 0 }}">
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.trading_fee) }}">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="deposit_fee" class="form-label">存入证券费</label>
                                     <input type="number" class="form-control" id="deposit_fee" name="deposit_fee" 
-                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.deposit_fee) if transaction.deposit_fee != 0 }}">
+                                           step="0.01" min="0" value="{{ "%.2f"|format(transaction.deposit_fee) }}">
                                 </div>
                             </div>
                         </div>
@@ -223,49 +223,13 @@ function deleteTradeDetail(button) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 日期快速输入处理
-    document.getElementById('transaction_date').addEventListener('input', function(event) {
-        const value = this.value;
-        if (value.length === 8 && !value.includes('-')) {
-            const year = value.substring(0, 4);
-            const month = value.substring(4, 6);
-            const day = value.substring(6, 8);
-            this.value = `${year}-${month}-${day}`;
-        }
-    });
-
-    // 日期输入框回车键处理
-    document.getElementById('transaction_date').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('stock_code').focus();
-        }
-    });
-
-    // 股票代码输入框回车键处理
-    document.getElementById('stock_code').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('transaction_code').focus();
-        }
-    });
-
-    // 交易编号输入框回车键处理
-    document.getElementById('transaction_code').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            // 直接跳转到第一个数量输入框
-            const firstQuantityInput = document.querySelector('.quantity-input');
-            if (firstQuantityInput) {
-                firstQuantityInput.focus();
-            }
-        }
-    });
-
-    // 费用输入框的键盘事件
+    // 绑定事件监听器
+    document.getElementById('transaction_date').addEventListener('input', handleDateInput);
+    
+    // 设置费用输入框的键盘事件
     const feeInputs = [
         'broker_fee', 'transaction_levy', 'stamp_duty',
-        'trading_fee', 'deposit_fee'
+        'trading_fee', 'clearing_fee', 'deposit_fee'
     ];
     
     feeInputs.forEach((id, index) => {
@@ -276,8 +240,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (id === 'deposit_fee') {
-                    // 存入证券费按回车跳转到保存并添加下一条按钮
-                    document.querySelector('button[value="save_and_add"]').focus();
+                    // 存入证券费按回车跳转到保存按钮
+                    document.querySelector('button[type="submit"]').focus();
                 } else {
                     // 其他费用输入框按回车跳转到下一个费用输入框
                     const nextInput = document.getElementById(feeInputs[index + 1]);
@@ -285,79 +249,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } else if (e.key === 'Tab' && !e.shiftKey) {
                 e.preventDefault();
-                if (id === 'deposit_fee') {
-                    // 存入证券费按Tab跳转到保存按钮
-                    document.querySelector('button[value="save"]').focus();
+                if (id === 'broker_fee') {
+                    // 经纪佣金按Tab跳转到保存按钮
+                    document.querySelector('button[type="submit"]').focus();
+                } else if (id === 'deposit_fee') {
+                    // 存入证券费按Tab跳转到取消按钮
+                    document.querySelector('a.btn-outline-secondary').focus();
                 }
             }
         });
     });
-
-    // 初始化所有成交明细的键盘事件
-    document.querySelectorAll('.trade-detail').forEach(detail => {
-        const quantityInput = detail.querySelector('.quantity-input');
-        const priceInput = detail.querySelector('.price-input');
+    
+    // 初始化第一行成交明细的键盘事件
+    const firstDetail = document.querySelector('.trade-detail');
+    if (firstDetail) {
+        const quantityInput = firstDetail.querySelector('.quantity-input');
+        const priceInput = firstDetail.querySelector('.price-input');
         bindTradeDetailEvents(quantityInput, priceInput);
+    }
+    
+    // 设置保存按钮的点击事件
+    document.querySelector('button[type="submit"]').addEventListener('click', function(e) {
+        e.preventDefault();
+        submitForm();
     });
-
-    // 添加成交明细时绑定键盘事件
-    const originalAddTradeDetail = window.addTradeDetail;
-    window.addTradeDetail = function() {
-        originalAddTradeDetail();
-        const details = document.querySelectorAll('.trade-detail');
-        const lastDetail = details[details.length - 1];
-        const quantityInput = lastDetail.querySelector('.quantity-input');
-        const priceInput = lastDetail.querySelector('.price-input');
-        bindTradeDetailEvents(quantityInput, priceInput);
-    };
-
+    
     // 阻止表单默认提交
     document.getElementById('transactionForm').addEventListener('submit', function(e) {
         e.preventDefault();
     });
-
-    // 提交表单
-    document.querySelectorAll('button[type="submit"]').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
-            const form = document.getElementById('transactionForm');
-            const action = this.value;
-            
-            // 验证表单
-            if (!form.checkValidity()) {
-                form.reportValidity();
-                return;
+    
+    // 为所有输入框添加回车键处理
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
             }
-            
-            // 提交表单
-            const formData = new FormData(form);
-            
-            // 处理空值
-            const feeFields = ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'];
-            feeFields.forEach(field => {
-                const value = formData.get(field);
-                if (!value) {
-                    formData.set(field, '0');
-                }
-            });
-            
-            formData.append('action', action);
-            
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    window.location.href = '{{ url_for("stock.list") }}';
-                } else {
-                    alert('保存失败：' + result.error);
-                }
-            })
-            .catch(error => {
-                alert('保存失败：' + error);
-            });
         });
     });
 });

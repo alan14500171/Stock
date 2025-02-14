@@ -33,7 +33,7 @@ def calculate_stats(transactions):
         'total_buy': 0,            # 买入总额（不含费用）
         'total_buy_with_fees': 0,  # 买入总额（含费用）
         'total_buy_quantity': 0,    # 买入总数量
-        'avg_cost': 0,             # 均价（含费用）
+        'avg_cost': 0,             # 加权平均价格（含费用）
         'total_sell': 0,           # 卖出总额
         'total_fees': 0,           # 费用
         'realized_profit': 0,       # 已实现盈亏
@@ -41,7 +41,8 @@ def calculate_stats(transactions):
         'market_value': 0,          # 持仓价值
         'total_profit': 0,          # 总盈亏
         'profit_rate': 0,          # 总盈亏比例
-        'transactions': []          # 交易记录
+        'transactions': [],         # 交易记录
+        'fifo_queue': []           # FIFO队列，用于计算每笔交易的FIFO均价
     })
     
     # 获取所有相关股票的名称
@@ -68,6 +69,51 @@ def calculate_stats(transactions):
         stock['transaction_count'] += 1
         stock['total_fees'] += trans.total_fees
         
+        # 计算FIFO均价
+        fifo_price = 0
+        if trans.transaction_type == 'BUY':
+            # 买入时，计算当前这笔交易的均价（含费用）
+            fifo_price = (trans.total_amount + trans.total_fees) / trans.total_quantity
+            # 添加到FIFO队列
+            stock['fifo_queue'].append({
+                'quantity': trans.total_quantity,
+                'price': fifo_price
+            })
+        else:  # SELL
+            # 卖出时，从FIFO队列中计算卖出部分的均价
+            remaining_sell_quantity = trans.total_quantity
+            total_cost = 0
+            sell_records = []
+            
+            for buy_record in stock['fifo_queue'][:]:
+                if remaining_sell_quantity <= 0:
+                    break
+                    
+                if buy_record['quantity'] <= remaining_sell_quantity:
+                    # 完全卖出这笔买入
+                    sell_quantity = buy_record['quantity']
+                    total_cost += sell_quantity * buy_record['price']
+                    remaining_sell_quantity -= sell_quantity
+                    stock['fifo_queue'].remove(buy_record)
+                    sell_records.append({
+                        'quantity': sell_quantity,
+                        'price': buy_record['price']
+                    })
+                else:
+                    # 部分卖出
+                    sell_quantity = remaining_sell_quantity
+                    total_cost += sell_quantity * buy_record['price']
+                    buy_record['quantity'] -= sell_quantity
+                    remaining_sell_quantity = 0
+                    sell_records.append({
+                        'quantity': sell_quantity,
+                        'price': buy_record['price']
+                    })
+            
+            if sell_records:
+                # 计算FIFO均价
+                fifo_price = total_cost / trans.total_quantity
+        
         # 计算交易明细
         trans_detail = {
             'transaction_date': trans.transaction_date,
@@ -77,13 +123,14 @@ def calculate_stats(transactions):
             'total_amount': trans.total_amount,
             'total_fees': trans.total_fees,
             'exchange_rate': trans.exchange_rate,
-            'avg_price': trans.average_price,
+            'avg_price': trans.average_price,  # 原始购买价格
+            'fifo_price': fifo_price,     # FIFO均价（含费用）
             'net_amount': trans.net_amount,
             'net_amount_hkd': trans.net_amount_hkd,
             'details': []
         }
         
-        # 计算每笔成交的均价和盈亏
+        # 更新股票统计数据
         if trans.transaction_type == 'BUY':
             stock['total_buy'] += trans.total_amount
             stock['total_buy_with_fees'] += (trans.total_amount + trans.total_fees)
@@ -100,7 +147,7 @@ def calculate_stats(transactions):
             stock['realized_profit'] += realized_profit
             market_stats[market]['realized_profit'] += realized_profit
         
-        # 计算均价
+        # 计算加权平均价格（含费用）- 用于汇总显示
         if stock['total_buy_quantity'] > 0:
             stock['avg_cost'] = stock['total_buy_with_fees'] / stock['total_buy_quantity']
         
@@ -402,10 +449,8 @@ def add():
                 currency = 'USD'  # 统一使用USD作为货币代码
                 exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
                 if exchange_rate is None:
-                    return jsonify({
-                        'success': False,
-                        'error': f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试'
-                    })
+                    flash(f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试')
+                    return redirect(url_for('stock.add'))
             
             # 创建交易主记录
             transaction = StockTransaction(
@@ -440,23 +485,18 @@ def add():
                     db.session.add(detail)
             
             db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': '交易记录添加成功'
-            })
+            flash('交易记录添加成功')
             
-        except ValueError as e:
-            db.session.rollback()
-            return jsonify({
-                'success': False,
-                'error': f'数据格式错误：{str(e)}'
-            })
+            # 根据按钮类型决定重定向
+            action = request.form.get('action', 'save')
+            if action == 'save_and_add':
+                return redirect(url_for('stock.add'))
+            else:
+                return redirect(url_for('stock.list'))
         except Exception as e:
             db.session.rollback()
-            return jsonify({
-                'success': False,
-                'error': f'添加失败：{str(e)}'
-            })
+            flash(f'添加失败：{str(e)}')
+            return redirect(url_for('stock.add'))
 
 @stock_bp.route('/stock/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
