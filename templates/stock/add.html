@@ -263,38 +263,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // 设置日期默认值为当天
     setDefaultDate();
 
-    // 日期快速输入处理
-    document.getElementById('transaction_date').addEventListener('input', function(event) {
-        const value = this.value;
-        if (value.length === 8 && !value.includes('-')) {
-            const year = value.substring(0, 4);
-            const month = value.substring(4, 6);
-            const day = value.substring(6, 8);
-            this.value = `${year}-${month}-${day}`;
-        }
-    });
-
-    // 添加日期输入框的回车键处理
-    document.getElementById('transaction_date').addEventListener('keydown', function(e) {
+    // 日期输入框事件处理
+    const dateInput = document.getElementById('transaction_date');
+    dateInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             document.getElementById('stock_code').focus();
         }
     });
 
-    // 添加股票代码输入框的回车键处理
-    document.getElementById('stock_code').addEventListener('keydown', function(e) {
+    // 股票代码输入框事件处理
+    const stockCodeInput = document.getElementById('stock_code');
+    stockCodeInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             document.getElementById('transaction_code').focus();
         }
     });
 
-    // 添加交易编号输入框的回车键处理
-    document.getElementById('transaction_code').addEventListener('keydown', function(e) {
+    // 交易编号输入框事件处理
+    const transactionCodeInput = document.getElementById('transaction_code');
+    transactionCodeInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
-            // 获取第一个数量输入框
+            document.getElementById('transaction_type').focus();
+        }
+    });
+
+    // 交易类型选择框事件处理
+    const transactionTypeSelect = document.getElementById('transaction_type');
+    transactionTypeSelect.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
             const firstQuantityInput = document.querySelector('.quantity-input');
             if (firstQuantityInput) {
                 firstQuantityInput.focus();
@@ -324,14 +324,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 初始化第一行成交明细的键盘事件
-    const firstDetail = document.querySelector('.trade-detail');
-    if (firstDetail) {
-        const quantityInput = firstDetail.querySelector('.quantity-input');
-        const priceInput = firstDetail.querySelector('.price-input');
-        bindTradeDetailEvents(quantityInput, priceInput);
-    }
-
     // 设置费用输入框的键盘事件
     const feeInputs = [
         'broker_fee', 'transaction_levy', 'stamp_duty',
@@ -346,16 +338,41 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (id === 'deposit_fee') {
-                    // 存入证券费按回车跳转到"保存并添加下一条"按钮
-                    document.querySelector('button[value="save_and_add"]').focus();
+                    // 存入证券费按回车跳转到"保存并添加下一条"按钮并触发点击
+                    const saveAndAddButton = document.querySelector('button[value="save_and_add"]');
+                    if (saveAndAddButton) {
+                        saveAndAddButton.focus();
+                        saveAndAddButton.click();
+                    }
                 } else {
                     // 其他费用输入框按回车跳转到下一个费用输入框
+                    const nextInput = document.getElementById(feeInputs[index + 1]);
+                    if (nextInput) nextInput.focus();
+                }
+            } else if (e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault();
+                if (id === 'broker_fee') {
+                    // 经纪佣金按Tab键跳转到保存按钮
+                    document.querySelector('button[value="save"]').focus();
+                } else if (id === 'deposit_fee') {
+                    // 存入证券费按Tab键跳转到取消按钮
+                    document.querySelector('a.btn-outline-secondary').focus();
+                } else {
+                    // 其他费用按Tab键跳转到下一个费用输入框
                     const nextInput = document.getElementById(feeInputs[index + 1]);
                     if (nextInput) nextInput.focus();
                 }
             }
         });
     });
+
+    // 初始化第一行成交明细的键盘事件
+    const firstDetail = document.querySelector('.trade-detail');
+    if (firstDetail) {
+        const quantityInput = firstDetail.querySelector('.quantity-input');
+        const priceInput = firstDetail.querySelector('.price-input');
+        bindTradeDetailEvents(quantityInput, priceInput);
+    }
 
     // 交易编号自动判断买卖类型
     document.getElementById('transaction_code').addEventListener('input', function() {
