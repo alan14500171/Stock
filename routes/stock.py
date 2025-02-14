@@ -402,8 +402,10 @@ def add():
                 currency = 'USD'  # 统一使用USD作为货币代码
                 exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
                 if exchange_rate is None:
-                    flash(f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试')
-                    return redirect(url_for('stock.add'))
+                    return jsonify({
+                        'success': False,
+                        'error': f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试'
+                    })
             
             # 创建交易主记录
             transaction = StockTransaction(
@@ -438,18 +440,23 @@ def add():
                     db.session.add(detail)
             
             db.session.commit()
-            flash('交易记录添加成功')
+            return jsonify({
+                'success': True,
+                'message': '交易记录添加成功'
+            })
             
-            # 根据按钮类型决定重定向
-            action = request.form.get('action', 'save')
-            if action == 'save_and_add':
-                return redirect(url_for('stock.add'))
-            else:
-                return redirect(url_for('stock.list'))
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'error': f'数据格式错误：{str(e)}'
+            })
         except Exception as e:
             db.session.rollback()
-            flash(f'添加失败：{str(e)}')
-            return redirect(url_for('stock.add'))
+            return jsonify({
+                'success': False,
+                'error': f'添加失败：{str(e)}'
+            })
 
 @stock_bp.route('/stock/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
