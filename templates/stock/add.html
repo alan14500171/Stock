@@ -77,25 +77,25 @@
                             <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="broker_fee" class="form-label">经纪佣金</label>
-                                    <input type="number" class="form-control" id="broker_fee" name="broker_fee" step="0.01" min="0" value="0">
+                                    <input type="number" class="form-control" id="broker_fee" name="broker_fee" step="0.01" min="0">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="transaction_levy" class="form-label">交易征费</label>
-                                    <input type="number" class="form-control" id="transaction_levy" name="transaction_levy" step="0.01" min="0" value="0">
+                                    <input type="number" class="form-control" id="transaction_levy" name="transaction_levy" step="0.01" min="0">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="stamp_duty" class="form-label">印花税</label>
-                                    <input type="number" class="form-control" id="stamp_duty" name="stamp_duty" step="0.01" min="0" value="0">
+                                    <input type="number" class="form-control" id="stamp_duty" name="stamp_duty" step="0.01" min="0">
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="trading_fee" class="form-label">交易费</label>
-                                    <input type="number" class="form-control" id="trading_fee" name="trading_fee" step="0.01" min="0" value="0">
+                                    <input type="number" class="form-control" id="trading_fee" name="trading_fee" step="0.01" min="0">
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="deposit_fee" class="form-label">存入证券费</label>
-                                    <input type="number" class="form-control" id="deposit_fee" name="deposit_fee" step="0.01" min="0" value="0">
+                                    <input type="number" class="form-control" id="deposit_fee" name="deposit_fee" step="0.01" min="0">
                                 </div>
                             </div>
                         </div>
@@ -242,6 +242,11 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // 阻止表单默认提交
+    document.getElementById('transactionForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+    });
+
     // 设置日期默认值为当天
     function setDefaultDate() {
         const today = new Date();
@@ -261,6 +266,89 @@ document.addEventListener('DOMContentLoaded', function() {
             const day = value.substring(6, 8);
             this.value = `${year}-${month}-${day}`;
         }
+    });
+
+    // 添加日期输入框的回车键处理
+    document.getElementById('transaction_date').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('stock_code').focus();
+        }
+    });
+
+    // 添加股票代码输入框的回车键处理
+    document.getElementById('stock_code').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('transaction_code').focus();
+        }
+    });
+
+    // 添加交易编号输入框的回车键处理
+    document.getElementById('transaction_code').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            // 获取第一个数量输入框
+            const firstQuantityInput = document.querySelector('.quantity-input');
+            if (firstQuantityInput) {
+                firstQuantityInput.focus();
+            }
+        }
+    });
+
+    // 绑定成交明细的键盘事件
+    function bindTradeDetailEvents(quantityInput, priceInput) {
+        // 数量输入框事件
+        quantityInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                priceInput.focus();
+            }
+        });
+        
+        // 价格输入框事件
+        priceInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('broker_fee').focus();
+            } else if (e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('addDetailBtn').focus();
+            }
+        });
+    }
+
+    // 初始化第一行成交明细的键盘事件
+    const firstDetail = document.querySelector('.trade-detail');
+    if (firstDetail) {
+        const quantityInput = firstDetail.querySelector('.quantity-input');
+        const priceInput = firstDetail.querySelector('.price-input');
+        bindTradeDetailEvents(quantityInput, priceInput);
+    }
+
+    // 设置费用输入框的键盘事件
+    const feeInputs = [
+        'broker_fee', 'transaction_levy', 'stamp_duty',
+        'trading_fee', 'deposit_fee'
+    ];
+    
+    feeInputs.forEach((id, index) => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (id === 'deposit_fee') {
+                    // 存入证券费按回车跳转到"保存并添加下一条"按钮
+                    document.querySelector('button[value="save_and_add"]').focus();
+                } else {
+                    // 其他费用输入框按回车跳转到下一个费用输入框
+                    const nextInput = document.getElementById(feeInputs[index + 1]);
+                    if (nextInput) nextInput.focus();
+                }
+            }
+        });
     });
 
     // 交易编号自动判断买卖类型
@@ -290,23 +378,35 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 提交表单
             const formData = new FormData(form);
+            
+            // 处理费用字段的空值
+            const feeFields = ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'];
+            feeFields.forEach(field => {
+                const value = formData.get(field);
+                if (!value || value.trim() === '') {
+                    formData.set(field, '0');
+                }
+            });
+            
             formData.append('action', action);
             
             fetch(window.location.href, {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('网络响应不正确');
+                }
+                return response.json();
+            })
             .then(result => {
                 if (result.success) {
-                    if (action === 'save') {
-                        window.location.href = '{{ url_for("stock.list") }}';
-                    } else {
-                        // 重置表单
-                        form.reset();
-                        setDefaultDate();
-                        // 聚焦到交易编号输入框
-                        document.getElementById('transaction_code').focus();
+                    if (result.message) {
+                        alert(result.message);
+                    }
+                    if (result.redirect) {
+                        window.location.href = result.redirect;
                     }
                 } else {
                     alert('保存失败：' + result.error);
@@ -318,5 +418,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// 添加成交明细行
+function addTradeDetail() {
+    const container = document.getElementById('trade-details');
+    const newDetail = document.createElement('div');
+    newDetail.className = 'row mb-2 trade-detail';
+    newDetail.innerHTML = `
+        <div class="col-md-5">
+            <label class="form-label">数量</label>
+            <input type="number" class="form-control quantity-input" name="quantities[]" min="1" required>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label">价格</label>
+            <input type="number" class="form-control price-input" name="prices[]" step="0.001" min="0" required>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-danger btn-sm delete-detail" onclick="deleteTradeDetail(this)">
+                <i class="bi bi-trash"></i> 删除
+            </button>
+        </div>
+    `;
+    container.appendChild(newDetail);
+    
+    // 获取新添加的输入框
+    const newQuantityInput = newDetail.querySelector('.quantity-input');
+    const newPriceInput = newDetail.querySelector('.price-input');
+    
+    // 绑定键盘事件
+    bindTradeDetailEvents(newQuantityInput, newPriceInput);
+    
+    // 自动聚焦到新添加的数量输入框
+    newQuantityInput.focus();
+}
+
+// 删除成交明细行
+function deleteTradeDetail(button) {
+    const detailRow = button.closest('.trade-detail');
+    const container = document.getElementById('trade-details');
+    
+    if (container.children.length > 1) {
+        detailRow.remove();
+    } else {
+        // 如果是最后一行，清空输入值
+        const quantityInput = detailRow.querySelector('.quantity-input');
+        const priceInput = detailRow.querySelector('.price-input');
+        quantityInput.value = '';
+        priceInput.value = '';
+        quantityInput.focus();
+    }
+}
 </script>
 {% endblock %} 

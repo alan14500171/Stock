@@ -428,75 +428,70 @@ def list():
 @login_required
 def add():
     if request.method == 'GET':
-        # 获取所有股票并转换为字典列表
-        stocks = Stock.query.order_by(Stock.market, Stock.code).all()
-        stocks_list = [{
-            'code': stock.code,
-            'market': stock.market,
-            'name': stock.name,
-            'full_name': stock.full_name
-        } for stock in stocks]
-        return render_template('stock/add.html', stocks=stocks_list)
-    elif request.method == 'POST':
-        try:
-            # 获取表单数据
-            market = request.form['market']
-            transaction_date = request.form['transaction_date']
-            
-            # 如果是非港股市场，获取汇率
-            exchange_rate = None
-            if market != 'HK':
-                currency = 'USD'  # 统一使用USD作为货币代码
-                exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
-                if exchange_rate is None:
-                    flash(f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试')
-                    return redirect(url_for('stock.add'))
-            
-            # 创建交易主记录
-            transaction = StockTransaction(
-                user_id=session['user_id'],
-                transaction_code=request.form['transaction_code'],
-                stock_code=request.form['stock_code'],
-                market=market,
-                transaction_type=request.form['transaction_type'],
-                transaction_date=datetime.strptime(transaction_date, '%Y-%m-%d'),
-                exchange_rate=exchange_rate,
-                broker_fee=float(request.form.get('broker_fee', 0)),
-                stamp_duty=float(request.form.get('stamp_duty', 0)),
-                transaction_levy=float(request.form.get('transaction_levy', 0)),
-                trading_fee=float(request.form.get('trading_fee', 0)),
-                clearing_fee=float(request.form.get('clearing_fee', 0)),
-                deposit_fee=float(request.form.get('deposit_fee', 0))
-            )
-            db.session.add(transaction)
-            db.session.flush()  # 获取transaction.id
-            
-            # 处理成交明细
-            quantities = request.form.getlist('quantities[]')
-            prices = request.form.getlist('prices[]')
-            
-            for quantity, price in zip(quantities, prices):
-                if quantity and price:  # 确保数量和价格都有值
-                    detail = StockTransactionDetail(
-                        transaction_id=transaction.id,
-                        quantity=int(quantity),
-                        price=float(price)
-                    )
-                    db.session.add(detail)
-            
-            db.session.commit()
-            flash('交易记录添加成功')
-            
-            # 根据按钮类型决定重定向
-            action = request.form.get('action', 'save')
-            if action == 'save_and_add':
-                return redirect(url_for('stock.add'))
-            else:
-                return redirect(url_for('stock.list'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'添加失败：{str(e)}')
-            return redirect(url_for('stock.add'))
+        return render_template('stock/add.html')
+    
+    try:
+        # 获取表单数据
+        market = request.form['market']
+        transaction_date = request.form['transaction_date']
+        
+        # 如果是非港股市场，获取汇率
+        exchange_rate = None
+        if market != 'HK':
+            currency = 'USD'  # 统一使用USD作为货币代码
+            exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
+            if exchange_rate is None:
+                return jsonify({
+                    'success': False,
+                    'error': f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试'
+                })
+        
+        # 创建交易主记录
+        transaction = StockTransaction(
+            user_id=session['user_id'],
+            transaction_code=request.form['transaction_code'],
+            stock_code=request.form['stock_code'],
+            market=market,
+            transaction_type=request.form['transaction_type'],
+            transaction_date=datetime.strptime(transaction_date, '%Y-%m-%d'),
+            exchange_rate=exchange_rate,
+            broker_fee=float(request.form.get('broker_fee', 0)),
+            stamp_duty=float(request.form.get('stamp_duty', 0)),
+            transaction_levy=float(request.form.get('transaction_levy', 0)),
+            trading_fee=float(request.form.get('trading_fee', 0)),
+            clearing_fee=float(request.form.get('clearing_fee', 0)),
+            deposit_fee=float(request.form.get('deposit_fee', 0))
+        )
+        db.session.add(transaction)
+        db.session.flush()  # 获取transaction.id
+        
+        # 处理成交明细
+        quantities = request.form.getlist('quantities[]')
+        prices = request.form.getlist('prices[]')
+        
+        for quantity, price in zip(quantities, prices):
+            if quantity and price:  # 确保数量和价格都有值
+                detail = StockTransactionDetail(
+                    transaction_id=transaction.id,
+                    quantity=int(quantity),
+                    price=float(price)
+                )
+                db.session.add(detail)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '交易记录添加成功',
+            'redirect': url_for('stock.list') if request.form.get('action') == 'save' else url_for('stock.add')
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 @stock_bp.route('/stock/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
