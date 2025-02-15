@@ -46,7 +46,7 @@
                     <div class="card mb-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">成交明细</h5>
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="addDetailBtn">添加成交记录</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addDetailBtn" onclick="TransactionForm.addTradeDetail()">添加成交记录</button>
                         </div>
                         <div class="card-body">
                             <div id="trade-details">
@@ -235,6 +235,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // 初始化交易表单控制模块
+    TransactionForm.init();
+
     // 阻止表单默认提交
     document.getElementById('transactionForm').addEventListener('submit', function(e) {
         e.preventDefault();

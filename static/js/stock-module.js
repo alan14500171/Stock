@@ -239,10 +239,34 @@ window.StockModule = StockModule;
 // 添加主界面的股票代码查询功能
 class StockCodeControl {
     static init() {
-        // 查找所有需要绑定股票查询功能的输入框
-        document.querySelectorAll('input[data-stock-code-control]').forEach(input => {
+        document.querySelectorAll('[data-stock-code-control]').forEach(input => {
             this.bindStockCodeEvents(input);
+            this.createUIElements(input);
         });
+    }
+
+    static clearControl(input) {
+        // 清除输入值
+        input.value = '';
+        
+        // 清除建议列表
+        const container = input.closest('.position-relative');
+        const suggestions = container.querySelector('#stock_suggestions');
+        if (suggestions) {
+            suggestions.innerHTML = '';
+        }
+        
+        // 清除选中的股票信息
+        const selectedInfo = container.querySelector('.selected-stock-info');
+        if (selectedInfo) {
+            selectedInfo.remove();
+        }
+        
+        // 重置市场选择
+        const marketInput = document.getElementById('market');
+        if (marketInput) {
+            marketInput.value = 'HK';
+        }
     }
 
     static bindStockCodeEvents(input) {

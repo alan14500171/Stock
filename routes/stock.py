@@ -263,26 +263,50 @@ def get_stock_price(code, market):
                 # 港股代码需要补足4位
                 padded_code = code.zfill(4)
                 url = f'https://www.google.com/finance/quote/{padded_code}:HKG'
-            else:
-                # 尝试不同的交易所
-                exchanges = ['NASDAQ', 'NYSE']
-                for exchange in exchanges:
+            elif market == 'USA':
+                # 设置请求头
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                
+                # 先尝试NASDAQ
+                try:
+                    test_url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
+                    print(f"尝试NASDAQ: {test_url}")
+                    response = requests.get(test_url, headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        price_div = soup.find('div', {'data-last-price': True})
+                        if price_div and price_div.get('data-last-price'):
+                            url = test_url
+                            stock.full_name = f"{code}:NASDAQ"
+                            db.session.commit()
+                            print("在NASDAQ找到股票")
+                except Exception as e:
+                    print(f"NASDAQ查询失败: {str(e)}")
+                    url = None
+
+                # 如果NASDAQ查询失败，尝试NYSE
+                if not url:
                     try:
-                        test_url = f'https://www.google.com/finance/quote/{code}:{exchange}'
-                        print(f"尝试访问URL: {test_url}")
+                        test_url = f'https://www.google.com/finance/quote/{code}:NYSE'
+                        print(f"尝试NYSE: {test_url}")
                         response = requests.get(test_url, headers=headers, timeout=10)
                         if response.status_code == 200:
                             soup = BeautifulSoup(response.text, 'html.parser')
                             price_div = soup.find('div', {'data-last-price': True})
                             if price_div and price_div.get('data-last-price'):
                                 url = test_url
-                                break
-                    except:
-                        continue
-                
+                                stock.full_name = f"{code}:NYSE"
+                                db.session.commit()
+                                print("在NYSE找到股票")
+                    except Exception as e:
+                        print(f"NYSE查询失败: {str(e)}")
+                        url = None
+
                 if not url:
-                    # 如果都失败了，默认使用NASDAQ
-                    url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
+                    # 如果两个交易所都查询失败
+                    raise ValueError(f"股票 {code} 在NASDAQ和NYSE均未找到")
         
         print(f"最终访问URL: {url}")
         
@@ -894,30 +918,55 @@ def get_stock_info():
         return jsonify({'success': False, 'error': '缺少必要参数'})
     
     try:
-        # 处理股票代码格式
-        if market == 'HK':
-            # 如果是港股，统一处理前导零
-            code = code.lstrip('0')  # 先去除所有前导零
-            code = code.zfill(4)  # 然后补充到4位
-        
-        # 构建Google Finance URL
-        if market == 'HK':
-            url = f'https://www.google.com/finance/quote/{code}:HKG'
-        else:  # USA
-            url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
-        
-        print(f"尝试访问URL: {url}")
-        
+        # 设置请求头
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         }
+
+        # 处理股票代码格式
+        if market == 'HK':
+            # 如果是港股，统一处理前导零
+            code = code.lstrip('0')  # 先去除所有前导零
+            code = code.zfill(4)  # 然后补充到4位
+            url = f'https://www.google.com/finance/quote/{code}:HKG'
+            google_code = f"{code}:HKG"
+        else:  # USA
+            google_code = None
+            # 先尝试NASDAQ
+            url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
+            try:
+                print(f"尝试NASDAQ: {url}")
+                response = requests.get(url, headers=headers, timeout=10)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                price_div = soup.find('div', {'data-last-price': True})
+                
+                if price_div and price_div.get('data-last-price'):
+                    google_code = f"{code}:NASDAQ"
+                else:
+                    # 如果在NASDAQ找不到，尝试NYSE
+                    url = f'https://www.google.com/finance/quote/{code}:NYSE'
+                    print(f"尝试NYSE: {url}")
+                    response = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    price_div = soup.find('div', {'data-last-price': True})
+                    if price_div and price_div.get('data-last-price'):
+                        google_code = f"{code}:NYSE"
+                    else:
+                        raise ValueError(f"股票 {code} 在NASDAQ和NYSE均未找到价格信息")
+            except Exception as e:
+                print(f"NASDAQ查询失败，尝试NYSE: {url}")
+                url = f'https://www.google.com/finance/quote/{code}:NYSE'
+                response = requests.get(url, headers=headers, timeout=10)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                price_div = soup.find('div', {'data-last-price': True})
+                if price_div and price_div.get('data-last-price'):
+                    google_code = f"{code}:NYSE"
+                else:
+                    raise ValueError(f"股票 {code} 在NYSE未找到价格信息")
         
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
+        print(f"最终访问URL: {url}")
         
         # 获取股票名称 - 查找包含中文名称的元素
         name_div = soup.find('div', {'class': 'zzDege'})
@@ -931,22 +980,27 @@ def get_stock_info():
             name = info.get('longName', None)
         
         # 获取股票价格
-        price_div = soup.find('div', {'data-last-price': True})
-        price = float(price_div['data-last-price']) if price_div and price_div.get('data-last-price') else None
+        price = float(price_div.get('data-last-price')) if price_div and price_div.get('data-last-price') else None
+
+        print(f"获取到股票信息: name={name}, price={price}, google_code={google_code}")
+
+        # 保存或更新股票信息到数据库
+        stock = Stock.query.filter_by(code=code, market=market).first()
+        if stock:
+            if name:
+                stock.name = name
+            if google_code:
+                stock.full_name = google_code
+            stock.updated_at = datetime.now()
+            db.session.commit()
         
-        if not name or not price:
-            print(f"未找到股票信息: name={name}, price={price}")
-            return jsonify({
-                'success': False,
-                'error': '无法获取股票信息，请检查股票代码是否正确'
-            })
-        
-        print(f"成功获取股票信息: {name}, 价格: {price}")
         return jsonify({
             'success': True,
             'data': {
+                'code': code,
+                'market': market,
                 'name': name,
-                'google_code': f"{code}:HKG" if market == 'HK' else f"{code}:NASDAQ",
+                'google_code': google_code,
                 'current_price': price
             }
         })

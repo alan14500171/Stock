@@ -316,32 +316,14 @@ const TransactionForm = {
 
     // 提交表单
     async submitForm(action) {
-        this.isSubmitting = true;  // 设置提交状态
-
-        const form = document.getElementById('transactionForm');
-        const submitButtons = form.querySelectorAll('button[type="submit"]');
-        
-        // 禁用所有提交按钮
-        submitButtons.forEach(button => {
-            button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 处理中...';
-        });
-
         try {
             // 获取表单数据
+            const form = document.getElementById('transactionForm');
             const formData = new FormData(form);
-            
-            // 处理费用字段，确保为数字
-            ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'].forEach(field => {
-                const value = formData.get(field);
-                formData.set(field, value ? parseFloat(value) : 0);
-            });
-            
-            // 添加action参数
             formData.append('action', action);
             
             // 发送请求
-            const response = await fetch(form.getAttribute('action'), {
+            const response = await fetch(form.action, {
                 method: 'POST',
                 body: formData
             });
@@ -349,80 +331,44 @@ const TransactionForm = {
             const result = await response.json();
             
             if (result.success) {
+                this.showSuccess(result.message);
+                
                 if (action === 'save_and_add') {
-                    // 重置所有控件
-                    // 清空日期和股票代码
-                    const dateInput = document.getElementById('transaction_date');
+                    // 重置表单
+                    form.reset();
+                    
+                    // 清除股票代码控件
                     const stockCodeInput = document.getElementById('stock_code');
-                    const transactionCodeInput = document.getElementById('transaction_code');
-                    const transactionTypeSelect = document.getElementById('transaction_type');
-                    
-                    if (dateInput) {
-                        dateInput.value = '';
-                        dateInput.focus();
-                    }
                     if (stockCodeInput) {
-                        stockCodeInput.value = '';
-                        // 清空市场选择
-                        const marketInput = document.getElementById('market');
-                        if (marketInput) {
-                            marketInput.value = 'HK';
-                        }
-                    }
-                    if (transactionCodeInput) {
-                        transactionCodeInput.value = '';
-                    }
-                    if (transactionTypeSelect) {
-                        transactionTypeSelect.value = '';
+                        StockCodeControl.clearControl(stockCodeInput);
                     }
                     
-                    // 清空所有费用输入框
-                    ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'].forEach(field => {
-                        const input = document.getElementById(field);
-                        if (input) {
-                            input.value = '';
-                        }
-                    });
-                    
-                    // 清空所有成交明细
-                    const container = document.getElementById('trade-details');
-                    if (container) {
-                        container.innerHTML = '';
+                    // 清除所有成交明细
+                    const tradeDetails = document.getElementById('trade-details');
+                    if (tradeDetails) {
+                        tradeDetails.innerHTML = '';
                         // 添加一个新的空白成交明细行
                         this.addTradeDetail();
                     }
                     
-                    this.showSuccess('保存成功，请继续添加下一条记录');
+                    // 设置默认日期
+                    this.setDefaultDate();
+                    
+                    // 将焦点设置到交易日期输入框
+                    const dateInput = document.getElementById('transaction_date');
+                    if (dateInput) {
+                        dateInput.focus();
+                    }
                 } else {
-                    this.showSuccess('保存成功');
-                    // 跳转到列表页
+                    // 普通保存，跳转到列表页
                     window.location.href = '/stock/list';
                 }
             } else {
-                this.showError(result.error || '保存失败');
+                this.showError(result.message || '保存失败');
             }
         } catch (error) {
-            console.error('提交表单时发生错误:', error);
-            let errorMessage = '提交表单时发生错误';
-            
-            if (error.message.includes('服务器错误')) {
-                errorMessage = error.message;
-            } else if (!navigator.onLine) {
-                errorMessage = '网络连接已断开，请检查网络设置后重试';
-            } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                errorMessage = '无法连接到服务器，请检查网络连接并重试';
-            } else if (error.message.includes('数据格式不正确')) {
-                errorMessage = '服务器响应格式错误，请刷新页面重试';
-            }
-            
-            this.showError(errorMessage);
-        } finally {
-            // 恢复提交状态和按钮状态
-            this.isSubmitting = false;
-            submitButtons.forEach(button => {
-                button.disabled = false;
-                button.innerHTML = button.value === 'save' ? '保存' : '保存并添加下一条';
-            });
+            console.error('提交表单时出错:', error);
+            this.showError('提交表单时发生错误');
         }
     },
 
