@@ -6,7 +6,7 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev')
     
     # 数据库配置
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:Zxc000123@192.168.0.109:3306/Stock'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:Zxc000123@172.16.0.109:3306/Stock'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,  # 增加连接池大小
