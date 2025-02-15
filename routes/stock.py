@@ -85,34 +85,44 @@ def calculate_stats(transactions):
             total_cost = 0
             sell_records = []
             
-            for buy_record in stock['fifo_queue'][:]:
-                if remaining_sell_quantity <= 0:
-                    break
-                    
-                if buy_record['quantity'] <= remaining_sell_quantity:
-                    # 完全卖出这笔买入
-                    sell_quantity = buy_record['quantity']
-                    total_cost += sell_quantity * buy_record['price']
-                    remaining_sell_quantity -= sell_quantity
-                    stock['fifo_queue'].remove(buy_record)
-                    sell_records.append({
-                        'quantity': sell_quantity,
-                        'price': buy_record['price']
-                    })
+            # 检查是否有足够的买入记录
+            total_available_quantity = sum(record['quantity'] for record in stock['fifo_queue'])
+            if total_available_quantity < remaining_sell_quantity:
+                print(f"警告：股票 {code} 的卖出数量 {remaining_sell_quantity} 大于可用数量 {total_available_quantity}")
+                # 使用最近的买入价格作为FIFO价格
+                fifo_price = stock['fifo_queue'][-1]['price'] if stock['fifo_queue'] else trans.average_price
+            else:
+                for buy_record in stock['fifo_queue'][:]:
+                    if remaining_sell_quantity <= 0:
+                        break
+                        
+                    if buy_record['quantity'] <= remaining_sell_quantity:
+                        # 完全卖出这笔买入
+                        sell_quantity = buy_record['quantity']
+                        total_cost += sell_quantity * buy_record['price']
+                        remaining_sell_quantity -= sell_quantity
+                        stock['fifo_queue'].remove(buy_record)
+                        sell_records.append({
+                            'quantity': sell_quantity,
+                            'price': buy_record['price']
+                        })
+                    else:
+                        # 部分卖出
+                        sell_quantity = remaining_sell_quantity
+                        total_cost += sell_quantity * buy_record['price']
+                        buy_record['quantity'] -= sell_quantity
+                        remaining_sell_quantity = 0
+                        sell_records.append({
+                            'quantity': sell_quantity,
+                            'price': buy_record['price']
+                        })
+                
+                if sell_records:
+                    # 计算FIFO均价
+                    fifo_price = total_cost / trans.total_quantity
                 else:
-                    # 部分卖出
-                    sell_quantity = remaining_sell_quantity
-                    total_cost += sell_quantity * buy_record['price']
-                    buy_record['quantity'] -= sell_quantity
-                    remaining_sell_quantity = 0
-                    sell_records.append({
-                        'quantity': sell_quantity,
-                        'price': buy_record['price']
-                    })
-            
-            if sell_records:
-                # 计算FIFO均价
-                fifo_price = total_cost / trans.total_quantity
+                    # 如果没有匹配的买入记录，使用交易的平均价格
+                    fifo_price = trans.average_price
         
         # 计算交易明细
         trans_detail = {

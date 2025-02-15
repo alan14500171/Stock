@@ -350,9 +350,13 @@ const TransactionForm = {
             
             if (result.success) {
                 if (action === 'save_and_add') {
+                    // 重置所有控件
                     // 清空日期和股票代码
                     const dateInput = document.getElementById('transaction_date');
                     const stockCodeInput = document.getElementById('stock_code');
+                    const transactionCodeInput = document.getElementById('transaction_code');
+                    const transactionTypeSelect = document.getElementById('transaction_type');
+                    
                     if (dateInput) {
                         dateInput.value = '';
                         dateInput.focus();
@@ -365,6 +369,29 @@ const TransactionForm = {
                             marketInput.value = 'HK';
                         }
                     }
+                    if (transactionCodeInput) {
+                        transactionCodeInput.value = '';
+                    }
+                    if (transactionTypeSelect) {
+                        transactionTypeSelect.value = '';
+                    }
+                    
+                    // 清空所有费用输入框
+                    ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'].forEach(field => {
+                        const input = document.getElementById(field);
+                        if (input) {
+                            input.value = '';
+                        }
+                    });
+                    
+                    // 清空所有成交明细
+                    const container = document.getElementById('trade-details');
+                    if (container) {
+                        container.innerHTML = '';
+                        // 添加一个新的空白成交明细行
+                        this.addTradeDetail();
+                    }
+                    
                     this.showSuccess('保存成功，请继续添加下一条记录');
                 } else {
                     this.showSuccess('保存成功');
