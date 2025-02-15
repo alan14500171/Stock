@@ -328,55 +328,51 @@ const TransactionForm = {
         });
 
         try {
-            // 构建表单数据
+            // 获取表单数据
             const formData = new FormData(form);
-            formData.append('action', action);
-
+            
             // 处理费用字段，确保为数字
             ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'].forEach(field => {
                 const value = formData.get(field);
                 formData.set(field, value ? parseFloat(value) : 0);
             });
-
+            
+            // 添加action参数
+            formData.append('action', action);
+            
             // 发送请求
-            const response = await fetch(form.getAttribute('action') || '/stock/add', {
+            const response = await fetch(form.getAttribute('action'), {
                 method: 'POST',
                 body: formData
             });
-
-            let result;
-            try {
-                result = await response.json();
-            } catch (e) {
-                throw new Error('服务器返回的数据格式不正确');
-            }
-
-            if (!response.ok) {
-                throw new Error(`服务器错误 (${response.status}): ${result?.error || '未知错误'}`);
-            }
+            
+            const result = await response.json();
             
             if (result.success) {
-                this.showSuccess('保存成功');
-                if (action === 'save') {
-                    window.location.href = result.redirect;
+                if (action === 'save_and_add') {
+                    // 清空日期和股票代码
+                    const dateInput = document.getElementById('transaction_date');
+                    const stockCodeInput = document.getElementById('stock_code');
+                    if (dateInput) {
+                        dateInput.value = '';
+                        dateInput.focus();
+                    }
+                    if (stockCodeInput) {
+                        stockCodeInput.value = '';
+                        // 清空市场选择
+                        const marketInput = document.getElementById('market');
+                        if (marketInput) {
+                            marketInput.value = 'HK';
+                        }
+                    }
+                    this.showSuccess('保存成功，请继续添加下一条记录');
                 } else {
-                    // 重置表单
-                    form.reset();
-                    // 设置默认日期
-                    this.setDefaultDate();
-                    // 添加一行成交明细
-                    const container = document.getElementById('trade-details');
-                    container.innerHTML = '';  // 清空所有成交明细
-                    this.addTradeDetail();  // 添加一行新的成交明细
-                    // 聚焦到第一个输入框
-                    document.getElementById('stock_code').focus();
+                    this.showSuccess('保存成功');
+                    // 跳转到列表页
+                    window.location.href = '/stock/list';
                 }
             } else {
-                this.showError(result.error || '保存失败，请重试');
-                // 如果是汇率相关错误，自动聚焦到日期输入框
-                if (result.error && result.error.includes('汇率')) {
-                    document.getElementById('transaction_date').focus();
-                }
+                this.showError(result.error || '保存失败');
             }
         } catch (error) {
             console.error('提交表单时发生错误:', error);
