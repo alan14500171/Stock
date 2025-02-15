@@ -9,15 +9,16 @@ class Config:
     SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:Zxc000123@192.168.0.109:3306/Stock'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,  # 连接池大小
-        'max_overflow': 20,  # 超过连接池大小外最多创建的连接数
-        'pool_timeout': 30,  # 池中没有连接时的等待时间
-        'pool_recycle': 1800,  # 连接重置周期，避免MySQL 8小时连接超时问题
-        'pool_pre_ping': True,  # 每次连接前ping一下服务器，确保连接可用
+        'pool_size': 20,  # 增加连接池大小
+        'max_overflow': 40,  # 增加最大溢出连接数
+        'pool_timeout': 60,  # 增加池等待时间
+        'pool_recycle': 1800,  # 保持连接重置周期
+        'pool_pre_ping': True,  # 保持连接检测
         'connect_args': {
-            'connect_timeout': 10,  # 连接超时时间
-            'read_timeout': 10,  # 读取超时时间
-            'write_timeout': 10  # 写入超时时间
+            'connect_timeout': 30,  # 增加连接超时时间
+            'read_timeout': 30,  # 增加读取超时时间
+            'write_timeout': 30,  # 增加写入超时时间
+            'charset': 'utf8mb4'  # 添加字符集设置
         }
     }
     

@@ -209,30 +209,22 @@ const TransactionForm = {
             if (!input) return;
 
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+                if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
                     e.preventDefault();
                     if (id === 'deposit_fee') {
-                        // 存入证券费按回车键处理
-                        const saveAndAddButton = document.querySelector('button[value="save_and_add"]');
-                        if (saveAndAddButton && !this.isSubmitting) {
-                            saveAndAddButton.focus();
-                            saveAndAddButton.click();
+                        if (e.key === 'Enter') {
+                            // 存入证券费按回车键处理
+                            const saveAndAddButton = document.querySelector('button[value="save_and_add"]');
+                            if (saveAndAddButton && !this.isSubmitting) {
+                                saveAndAddButton.focus();
+                                saveAndAddButton.click();
+                            }
+                        } else {
+                            // 存入证券费按Tab跳转到取消按钮
+                            document.querySelector('a.btn-outline-secondary').focus();
                         }
                     } else {
-                        // 跳转到下一个费用输入框
-                        const nextInput = document.getElementById(feeInputs[index + 1]);
-                        if (nextInput) nextInput.focus();
-                    }
-                } else if (e.key === 'Tab' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (id === 'broker_fee') {
-                        // 经纪佣金按Tab跳转到保存按钮
-                        document.querySelector('button[value="save"]').focus();
-                    } else if (id === 'deposit_fee') {
-                        // 存入证券费按Tab跳转到取消按钮
-                        document.querySelector('a.btn-outline-secondary').focus();
-                    } else {
-                        // 其他费用按Tab跳转到下一个费用
+                        // 其他费用输入框都跳转到下一个费用输入框
                         const nextInput = document.getElementById(feeInputs[index + 1]);
                         if (nextInput) nextInput.focus();
                     }
@@ -263,20 +255,61 @@ const TransactionForm = {
             // 检查必填字段
             const requiredFields = form.querySelectorAll('[required]');
             let isValid = true;
+            let firstInvalidField = null;
             
             requiredFields.forEach(field => {
                 if (!field.value.trim()) {
                     isValid = false;
                     field.classList.add('is-invalid');
+                    if (!firstInvalidField) firstInvalidField = field;
                     this.showError(`${field.previousElementSibling.textContent}不能为空`);
                 } else {
                     field.classList.remove('is-invalid');
                 }
             });
             
+            // 检查数值字段
+            const numberFields = form.querySelectorAll('input[type="number"]');
+            numberFields.forEach(field => {
+                const value = field.value.trim();
+                if (value) {
+                    const num = parseFloat(value);
+                    if (isNaN(num) || num < 0) {
+                        isValid = false;
+                        field.classList.add('is-invalid');
+                        if (!firstInvalidField) firstInvalidField = field;
+                        this.showError(`${field.previousElementSibling.textContent}必须是有效的正数`);
+                    } else {
+                        field.classList.remove('is-invalid');
+                    }
+                }
+            });
+            
+            // 检查成交明细
+            const details = document.querySelectorAll('.trade-detail');
+            if (details.length === 0) {
+                isValid = false;
+                this.showError('请至少添加一条成交明细');
+            } else {
+                let hasValidDetail = false;
+                details.forEach(detail => {
+                    const quantity = detail.querySelector('.quantity-input').value.trim();
+                    const price = detail.querySelector('.price-input').value.trim();
+                    if (quantity && price) {
+                        hasValidDetail = true;
+                    }
+                });
+                if (!hasValidDetail) {
+                    isValid = false;
+                    this.showError('请至少填写一条完整的成交明细');
+                }
+            }
+            
             if (isValid) {
                 const action = e.submitter.value;
                 await this.submitForm(action);
+            } else if (firstInvalidField) {
+                firstInvalidField.focus();
             }
         });
     },
@@ -294,16 +327,33 @@ const TransactionForm = {
             button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 处理中...';
         });
 
-        const formData = new FormData(form);
-        formData.append('action', action);
-
         try {
-            const response = await fetch(form.action || '/stock/add', {
+            // 构建表单数据
+            const formData = new FormData(form);
+            formData.append('action', action);
+
+            // 处理费用字段，确保为数字
+            ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'].forEach(field => {
+                const value = formData.get(field);
+                formData.set(field, value ? parseFloat(value) : 0);
+            });
+
+            // 发送请求
+            const response = await fetch(form.getAttribute('action') || '/stock/add', {
                 method: 'POST',
                 body: formData
             });
 
-            const result = await response.json();
+            let result;
+            try {
+                result = await response.json();
+            } catch (e) {
+                throw new Error('服务器返回的数据格式不正确');
+            }
+
+            if (!response.ok) {
+                throw new Error(`服务器错误 (${response.status}): ${result?.error || '未知错误'}`);
+            }
             
             if (result.success) {
                 this.showSuccess('保存成功');
@@ -323,9 +373,26 @@ const TransactionForm = {
                 }
             } else {
                 this.showError(result.error || '保存失败，请重试');
+                // 如果是汇率相关错误，自动聚焦到日期输入框
+                if (result.error && result.error.includes('汇率')) {
+                    document.getElementById('transaction_date').focus();
+                }
             }
         } catch (error) {
-            this.showError('提交表单时发生错误，请重试');
+            console.error('提交表单时发生错误:', error);
+            let errorMessage = '提交表单时发生错误';
+            
+            if (error.message.includes('服务器错误')) {
+                errorMessage = error.message;
+            } else if (!navigator.onLine) {
+                errorMessage = '网络连接已断开，请检查网络设置后重试';
+            } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                errorMessage = '无法连接到服务器，请检查网络连接并重试';
+            } else if (error.message.includes('数据格式不正确')) {
+                errorMessage = '服务器响应格式错误，请刷新页面重试';
+            }
+            
+            this.showError(errorMessage);
         } finally {
             // 恢复提交状态和按钮状态
             this.isSubmitting = false;

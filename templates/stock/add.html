@@ -10,7 +10,7 @@
                 <h4 class="mb-0">添加交易记录</h4>
             </div>
             <div class="card-body">
-                <form method="post" id="transactionForm" onsubmit="return false">
+                <form method="post" id="transactionForm" action="{{ url_for('stock.add') }}" onsubmit="return false">
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label">交易日期</label>
