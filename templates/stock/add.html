@@ -46,25 +46,11 @@
                     <div class="card mb-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">成交明细</h5>
-                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addTradeDetail()" id="addDetailBtn">添加成交记录</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addDetailBtn">添加成交记录</button>
                         </div>
                         <div class="card-body">
                             <div id="trade-details">
-                                <div class="row mb-2 trade-detail">
-                                    <div class="col-md-5">
-                                        <label class="form-label">数量</label>
-                                        <input type="number" class="form-control quantity-input" name="quantities[]" min="1" required>
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label">价格</label>
-                                        <input type="number" class="form-control price-input" name="prices[]" step="0.001" min="0" required>
-                                    </div>
-                                    <div class="col-md-2 d-flex align-items-end">
-                                        <button type="button" class="btn btn-outline-danger btn-sm delete-detail" onclick="deleteTradeDetail(this)">
-                                            <i class="bi bi-trash"></i> 删除
-                                        </button>
-                                    </div>
-                                </div>
+                                <!-- 成交明细行将由 JavaScript 动态添加 -->
                             </div>
                         </div>
                     </div>
@@ -248,390 +234,43 @@
 </style>
 
 <script>
-// 定义设置默认日期的函数
-function setDefaultDate() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    document.getElementById('transaction_date').value = `${year}-${month}-${day}`;
-}
-
 document.addEventListener('DOMContentLoaded', function() {
     // 阻止表单默认提交
     document.getElementById('transactionForm').addEventListener('submit', function(e) {
         e.preventDefault();
     });
 
-    // 设置日期默认值为当天
-    setDefaultDate();
-
-    // 日期输入框事件处理
-    const dateInput = document.getElementById('transaction_date');
-    dateInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('stock_code').focus();
-        }
-    });
-
-    // 股票代码输入框事件处理
-    const stockCodeInput = document.getElementById('stock_code');
-    stockCodeInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('transaction_code').focus();
-        }
-    });
-
-    // 交易编号输入框事件处理
-    const transactionCodeInput = document.getElementById('transaction_code');
-    transactionCodeInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            document.getElementById('transaction_type').focus();
-        }
-    });
-
-    // 交易类型选择框事件处理
-    const transactionTypeSelect = document.getElementById('transaction_type');
-    transactionTypeSelect.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const firstQuantityInput = document.querySelector('.quantity-input');
-            if (firstQuantityInput) {
-                firstQuantityInput.focus();
-            }
-        }
-    });
-
-    // 绑定成交明细的键盘事件
-    function bindTradeDetailEvents(quantityInput, priceInput) {
-        // 数量输入框事件
-        quantityInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                priceInput.focus();
-            }
-        });
-        
-        // 价格输入框事件
-        priceInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('broker_fee').focus();
-            } else if (e.key === 'Tab' && !e.shiftKey) {
-                e.preventDefault();
-                document.getElementById('addDetailBtn').focus();
-            }
-        });
-    }
-
-    // 设置费用输入框的键盘事件
-    const feeInputs = [
-        'broker_fee', 'transaction_levy', 'stamp_duty',
-        'trading_fee', 'deposit_fee'
-    ];
-    
-    feeInputs.forEach((id, index) => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        
+    // 禁用所有输入框的默认回车提交行为
+    document.querySelectorAll('input').forEach(input => {
         input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                if (id === 'deposit_fee') {
-                    // 存入证券费按回车跳转到"保存并添加下一条"按钮并触发点击
-                    const saveAndAddButton = document.querySelector('button[value="save_and_add"]');
-                    if (saveAndAddButton) {
-                        saveAndAddButton.focus();
-                        saveAndAddButton.click();
-                    }
-                } else {
-                    // 其他费用输入框按回车跳转到下一个费用输入框
-                    const nextInput = document.getElementById(feeInputs[index + 1]);
-                    if (nextInput) nextInput.focus();
+            }
+        });
+    });
+
+    // 添加交易编号输入框的失焦事件处理
+    document.getElementById('transaction_code').addEventListener('blur', async function() {
+        const code = this.value.trim();
+        if (code) {
+            try {
+                const response = await fetch(`/stock/check_transaction_code?code=${encodeURIComponent(code)}`);
+                const result = await response.json();
+                if (result.exists) {
+                    Toastify({
+                        text: "交易编号已存在，请使用其他编号",
+                        duration: 3000,
+                        gravity: "top",
+                        position: 'right',
+                        backgroundColor: "#f44336"
+                    }).showToast();
+                    this.focus();
                 }
-            } else if (e.key === 'Tab' && !e.shiftKey) {
-                e.preventDefault();
-                if (id === 'broker_fee') {
-                    // 经纪佣金按Tab键跳转到保存按钮
-                    document.querySelector('button[value="save"]').focus();
-                } else if (id === 'deposit_fee') {
-                    // 存入证券费按Tab键跳转到取消按钮
-                    document.querySelector('a.btn-outline-secondary').focus();
-                } else {
-                    // 其他费用按Tab键跳转到下一个费用输入框
-                    const nextInput = document.getElementById(feeInputs[index + 1]);
-                    if (nextInput) nextInput.focus();
-                }
-            }
-        });
-    });
-
-    // 初始化第一行成交明细的键盘事件
-    const firstDetail = document.querySelector('.trade-detail');
-    if (firstDetail) {
-        const quantityInput = firstDetail.querySelector('.quantity-input');
-        const priceInput = firstDetail.querySelector('.price-input');
-        bindTradeDetailEvents(quantityInput, priceInput);
-    }
-
-    // 交易编号自动判断买卖类型
-    document.getElementById('transaction_code').addEventListener('input', function() {
-        const code = this.value.trim().toUpperCase();
-        const typeSelect = document.getElementById('transaction_type');
-        
-        if (code.startsWith('P')) {
-            typeSelect.value = 'BUY';
-        } else if (code.startsWith('S')) {
-            typeSelect.value = 'SELL';
-        }
-    });
-
-    // 提交表单
-    document.querySelectorAll('button[type="submit"]').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
-            const form = document.getElementById('transactionForm');
-            const action = this.value;
-            
-            // 验证表单
-            if (!form.checkValidity()) {
-                form.reportValidity();
-                return;
-            }
-            
-            // 提交表单
-            submitForm(action);
-        });
-    });
-});
-
-// 添加交易明细行函数定义
-function addTradeDetail() {
-    const container = document.getElementById('trade-details');
-    const index = container.children.length;
-    
-    const row = document.createElement('div');
-    row.className = 'row mb-3';
-    row.innerHTML = `
-        <div class="col-md-6">
-            <input type="number" class="form-control" name="quantities[]" placeholder="数量" required>
-        </div>
-        <div class="col-md-6">
-            <div class="input-group">
-                <input type="number" class="form-control" name="prices[]" placeholder="价格" step="0.001" required>
-                <button type="button" class="btn btn-outline-danger" onclick="removeTradeDetail(this)">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </div>
-        </div>
-    `;
-    
-    container.appendChild(row);
-    bindTradeDetailEvents(row);
-}
-
-// 绑定交易明细事件函数定义
-function bindTradeDetailEvents(row) {
-    const quantityInput = row.querySelector('input[name="quantities[]"]');
-    const priceInput = row.querySelector('input[name="prices[]"]');
-    
-    // 数量输入框回车处理
-    quantityInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            priceInput.focus();
-        }
-    });
-    
-    // 价格输入框回车处理
-    priceInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            // 如果是最后一行，添加新行
-            const container = document.getElementById('trade-details');
-            if (row === container.lastElementChild) {
-                addTradeDetail();
-            }
-            // 聚焦到下一行的数量输入框
-            const nextRow = row.nextElementSibling;
-            if (nextRow) {
-                nextRow.querySelector('input[name="quantities[]"]').focus();
+            } catch (error) {
+                console.error('检查交易编号时出错:', error);
             }
         }
     });
-}
-
-// 删除交易明细行函数定义
-function removeTradeDetail(button) {
-    const container = document.getElementById('trade-details');
-    if (container.children.length > 1) {
-        button.closest('.row').remove();
-    }
-}
-
-// 提交表单
-async function submitForm(action) {
-    try {
-        // 检查表单是否正在提交
-        if (document.getElementById('transactionForm').dataset.submitting === 'true') {
-            return;
-        }
-        
-        // 标记表单正在提交
-        document.getElementById('transactionForm').dataset.submitting = 'true';
-        
-        // 获取表单数据
-        const formData = new FormData(document.getElementById('transactionForm'));
-        formData.append('action', action);
-        
-        // 处理空费用字段
-        const feeFields = ['broker_fee', 'transaction_levy', 'stamp_duty', 'trading_fee', 'deposit_fee'];
-        feeFields.forEach(field => {
-            let value = formData.get(field);
-            // 处理所有可能的空值情况
-            if (value === null || value === undefined || value === '' || value.trim() === '') {
-                value = '0';
-            }
-            // 确保值是有效的数字
-            value = parseFloat(value) || 0;
-            // 将处理后的值设置回表单数据
-            formData.set(field, value.toString());
-            // 同时更新输入框的值
-            const input = document.getElementById(field);
-            if (input) {
-                input.value = value.toString();
-            }
-        });
-        
-        // 检查交易明细
-        const quantities = formData.getAll('quantities[]');
-        const prices = formData.getAll('prices[]');
-        if (!quantities.length || !prices.length) {
-            throw new Error('请至少添加一条交易明细');
-        }
-        
-        // 验证必填字段
-        const requiredFields = ['transaction_date', 'stock_code', 'transaction_code', 'transaction_type'];
-        for (const field of requiredFields) {
-            const value = formData.get(field);
-            if (!value || value.trim() === '') {
-                throw new Error(`请填写${document.querySelector(`label[for="${field}"]`)?.textContent || field}`);
-            }
-        }
-        
-        // 发送请求
-        const response = await fetch(window.location.href, {
-            method: 'POST',
-            body: formData
-        });
-        
-        // 检查响应类型
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            // 如果响应不是JSON，可能是会话过期
-            if (response.redirected || response.url.includes('login')) {
-                Toastify({
-                    text: "会话已过期，请重新登录",
-                    duration: 3000,
-                    gravity: "top",
-                    position: 'right',
-                    backgroundColor: "#ff4444",
-                    stopOnFocus: true
-                }).showToast();
-                
-                // 延迟跳转到登录页面
-                setTimeout(() => {
-                    window.location.href = '/login';
-                }, 2000);
-                return;
-            }
-            throw new Error('服务器返回了非JSON格式的响应');
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // 保存成功
-            Toastify({
-                text: "保存成功",
-                duration: 1000,
-                gravity: "top",
-                position: 'right',
-                backgroundColor: "#4caf50",
-                stopOnFocus: true
-            }).showToast();
-            
-            if (action === 'save_and_add') {
-                // 保存当前市场选择
-                const currentMarket = document.getElementById('market').value;
-                
-                // 重置表单
-                document.getElementById('transactionForm').reset();
-                
-                // 恢复市场选择
-                document.getElementById('market').value = currentMarket;
-                
-                // 清除并重新添加一行交易明细
-                const container = document.getElementById('trade-details');
-                container.innerHTML = '';
-                addTradeDetail();
-                
-                // 重置日期为当天
-                setDefaultDate();
-                
-                // 设置焦点到日期输入框
-                setTimeout(() => {
-                    const dateInput = document.getElementById('transaction_date');
-                    dateInput.focus();
-                    dateInput.select();
-                }, 100);
-            } else {
-                // 普通保存，跳转到列表页
-                window.location.href = result.redirect;
-            }
-        } else {
-            throw new Error(result.error || '保存失败');
-        }
-    } catch (error) {
-        console.error('提交表单失败:', error);
-        Toastify({
-            text: error.message || '保存失败',
-            duration: 3000,
-            gravity: "top",
-            position: 'right',
-            backgroundColor: "#ff4444",
-            stopOnFocus: true
-        }).showToast();
-    } finally {
-        // 取消表单提交状态
-        document.getElementById('transactionForm').dataset.submitting = 'false';
-    }
-}
-
-// 添加交易编号输入框的失焦事件处理
-document.getElementById('transaction_code').addEventListener('blur', async function() {
-    const code = this.value.trim();
-    if (code) {
-        try {
-            const response = await fetch(`/stock/check_transaction_code?code=${encodeURIComponent(code)}`);
-            const result = await response.json();
-            if (result.exists) {
-                Toastify({
-                    text: "交易编号已存在，请使用其他编号",
-                    duration: 3000,
-                    gravity: "top",
-                    position: 'right',
-                    backgroundColor: "#f44336"
-                }).showToast();
-                this.focus();
-            }
-        } catch (error) {
-            console.error('检查交易编号时出错:', error);
-        }
-    }
 });
 </script>
 {% endblock %} 

@@ -112,7 +112,7 @@
                     
                     <div class="text-end">
                         <a href="{{ url_for('stock.list') }}" class="btn btn-outline-secondary">取消</a>
-                        <button type="submit" class="btn btn-primary">保存修改</button>
+                        <button type="submit" class="btn btn-primary" value="save">保存修改</button>
                     </div>
                 </form>
             </div>
@@ -274,18 +274,18 @@ document.addEventListener('DOMContentLoaded', function() {
         submitForm();
     });
     
-    // 阻止表单默认提交
-    document.getElementById('transactionForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-    });
-    
-    // 为所有输入框添加回车键处理
+    // 禁用所有输入框的默认回车提交行为
     document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('keypress', function(e) {
+        input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
             }
         });
+    });
+    
+    // 阻止表单默认提交
+    document.getElementById('transactionForm').addEventListener('submit', function(e) {
+        e.preventDefault();
     });
 });
 </script>
