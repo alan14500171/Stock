@@ -1,16 +1,46 @@
 [
   {
-    "id": "stock-app-deploy",
-    "execute-command": "/app/deploy.sh",
+    "id": "github-deploy",
+    "execute-command": "/app/restart.sh",
     "command-working-directory": "/app",
-    "response-message": "Deploying stock app...",
+    "response-message": "Deploying from GitHub...",
+    "trigger-rule": {
+      "and": [
+        {
+          "match": {
+            "type": "payload-hmac-sha1",
+            "secret": "your-github-webhook-secret",
+            "parameter": {
+              "source": "header",
+              "name": "X-Hub-Signature"
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "value",
+            "value": "refs/heads/main",
+            "parameter": {
+              "source": "payload",
+              "name": "ref"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "restart-stock-app",
+    "execute-command": "/app/restart.sh",
+    "command-working-directory": "/app",
+    "response-message": "Restarting stock app...",
     "trigger-rule": {
       "match": {
-        "type": "payload-hash-sha1",
-        "secret": "your-github-webhook-secret",
+        "type": "value",
+        "value": "123456",
         "parameter": {
           "source": "header",
-          "name": "X-Hub-Signature"
+          "name": "X-Token"
         }
       }
     }

@@ -1,7 +1,7 @@
 # Web框架和扩展
 flask==3.0.2
 flask-sqlalchemy==3.1.1
-flask-bootstrap5==2.3.3
+bootstrap-flask==2.4.1
 
 # 数据库
 pymysql==1.1.0
