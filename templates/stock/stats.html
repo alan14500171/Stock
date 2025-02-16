@@ -16,10 +16,10 @@
                         <i class="fas fa-sync-alt"></i> 刷新市值
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="expandAll">
-                        <i class="fas fa-expand-alt"></i> 展开全部
+                        <i class="fas fa-expand-alt"></i> 展开
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="collapseAll">
-                        <i class="fas fa-compress-alt"></i> 收起全部
+                        <i class="fas fa-compress-alt"></i> 收起
                     </button>
                     <a href="{{ url_for('stock.add') }}" class="btn btn-sm btn-primary">
                         <i class="fas fa-plus"></i> 添加记录
@@ -290,40 +290,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 展开全部
     document.getElementById('expandAll').addEventListener('click', function() {
-        document.querySelectorAll('.market-row').forEach(row => {
-            const button = row.querySelector('.toggle-market');
-            const icon = button.querySelector('i');
-            if (icon.classList.contains('fa-chevron-right')) {
-                button.click();
-            }
+        // 获取所有折叠的行
+        const allCollapsedMarketRows = Array.from(document.querySelectorAll('.market-row')).filter(row => {
+            return row.querySelector('.toggle-market i').classList.contains('fa-chevron-right');
+        });
+        const allCollapsedStockRows = Array.from(document.querySelectorAll('.stock-row:not(.d-none)')).filter(row => {
+            return row.querySelector('.toggle-stock i').classList.contains('fa-chevron-right');
         });
         
-        document.querySelectorAll('.stock-row').forEach(row => {
-            const button = row.querySelector('.toggle-stock');
-            const icon = button.querySelector('i');
-            if (icon.classList.contains('fa-chevron-right')) {
-                button.click();
-            }
-        });
+        if (allCollapsedMarketRows.length > 0) {
+            // 如果有折叠的市场行，先展开市场行
+            allCollapsedMarketRows.forEach(row => {
+                row.querySelector('.toggle-market').click();
+            });
+        } else if (allCollapsedStockRows.length > 0) {
+            // 如果市场行都已展开，且有折叠的股票行，则展开股票行
+            allCollapsedStockRows.forEach(row => {
+                row.querySelector('.toggle-stock').click();
+            });
+        }
     });
 
     // 收起全部
     document.getElementById('collapseAll').addEventListener('click', function() {
-        document.querySelectorAll('.stock-row').forEach(row => {
-            const button = row.querySelector('.toggle-stock');
-            const icon = button.querySelector('i');
-            if (icon.classList.contains('fa-chevron-down')) {
-                button.click();
-            }
+        // 获取所有展开的行
+        const allExpandedStockRows = Array.from(document.querySelectorAll('.stock-row:not(.d-none)')).filter(row => {
+            return row.querySelector('.toggle-stock i').classList.contains('fa-chevron-down');
+        });
+        const allExpandedMarketRows = Array.from(document.querySelectorAll('.market-row')).filter(row => {
+            return row.querySelector('.toggle-market i').classList.contains('fa-chevron-down');
         });
         
-        document.querySelectorAll('.market-row').forEach(row => {
-            const button = row.querySelector('.toggle-market');
-            const icon = button.querySelector('i');
-            if (icon.classList.contains('fa-chevron-down')) {
-                button.click();
-            }
-        });
+        if (allExpandedStockRows.length > 0) {
+            // 如果有展开的股票行，先收起股票行
+            allExpandedStockRows.forEach(row => {
+                row.querySelector('.toggle-stock').click();
+            });
+        } else if (allExpandedMarketRows.length > 0) {
+            // 如果股票行都已收起，且有展开的市场行，则收起市场行
+            allExpandedMarketRows.forEach(row => {
+                row.querySelector('.toggle-market').click();
+            });
+        }
     });
 });
 

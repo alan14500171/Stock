@@ -784,6 +784,7 @@ def stats():
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
+    # 按交易日期降序获取交易记录
     transactions = query.order_by(StockTransaction.transaction_date.desc()).all()
     
     # 获取所有股票代码供查询使用
@@ -797,9 +798,23 @@ def stats():
     # 计算统计数据
     market_stats, stock_stats = calculate_stats(transactions)
     
+    # 对股票统计数据按持股数量和买入总额降序排序
+    sorted_stock_stats = dict(sorted(
+        stock_stats.items(),
+        key=lambda x: (x[1]['current_quantity'], x[1]['total_buy']),
+        reverse=True
+    ))
+    
+    # 对每个股票的交易记录按日期降序排序
+    for code in sorted_stock_stats:
+        sorted_stock_stats[code]['transactions'].sort(
+            key=lambda x: x['transaction_date'],
+            reverse=True
+        )
+    
     return render_template('stock/stats.html',
                          market_stats=market_stats,
-                         stock_stats=stock_stats,
+                         stock_stats=sorted_stock_stats,
                          all_stock_codes=all_stock_codes,
                          selected_stock_codes=stock_codes)
 
