@@ -439,7 +439,7 @@ def list():
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
-    transactions = query.order_by(StockTransaction.transaction_date.desc()).all()
+    transactions = query.order_by(StockTransaction.created_at.desc()).all()
     
     # 获取所有股票代码供查询使用
     all_stock_codes = db.session.query(StockTransaction.stock_code)\
@@ -806,7 +806,7 @@ def stats():
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
     # 按交易日期降序获取交易记录
-    transactions = query.order_by(StockTransaction.transaction_date.desc()).all()
+    transactions = query.order_by(StockTransaction.created_at.desc()).all()
     
     # 获取所有股票代码供查询使用
     all_stock_codes = db.session.query(StockTransaction.stock_code)\
