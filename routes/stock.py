@@ -792,12 +792,15 @@ def fetch_missing_rates():
 @stock_bp.route('/stock/stats')
 @login_required
 def stats():
+    # 获取查询参数，但不设置默认值，允许为空
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     stock_codes = request.args.getlist('stock_codes')
     
+    # 只过滤用户ID
     query = StockTransaction.query.filter_by(user_id=session['user_id'])
     
+    # 仅当有查询参数时才应用过滤条件
     if start_date:
         query = query.filter(StockTransaction.transaction_date >= start_date)
     if end_date:
@@ -805,7 +808,7 @@ def stats():
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
-    # 按交易日期降序获取交易记录
+    # 按创建时间降序获取交易记录
     transactions = query.order_by(StockTransaction.created_at.desc()).all()
     
     # 获取所有股票代码供查询使用

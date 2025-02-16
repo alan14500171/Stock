@@ -110,10 +110,10 @@
                             
                             <!-- 该市场下的股票统计 -->
                             {% for code, stock in stock_stats.items() if stock.market == market %}
-                            <tr class="stock-row {{ '' if stock.current_quantity > 0 else 'd-none' }}" data-market="{{ market }}" data-code="{{ code }}">
+                            <tr class="stock-row d-none" data-market="{{ market }}" data-code="{{ code }}">
                                 <td>
                                     <button class="btn btn-sm btn-link p-0 toggle-stock ms-2">
-                                        <i class="fas fa-chevron-{{ 'down' if stock.current_quantity > 0 else 'right' }}"></i>
+                                        <i class="fas fa-chevron-right"></i>
                                     </button>
                                 </td>
                                 <td>{{ market }}</td>
@@ -145,7 +145,7 @@
                             
                             <!-- 该股票的详细交易记录 -->
                             {% for trans in stock.transactions %}
-                            <tr class="transaction-row {{ '' if stock.current_quantity > 0 else 'd-none' }}" data-market="{{ market }}" data-code="{{ code }}">
+                            <tr class="transaction-row d-none" data-market="{{ market }}" data-code="{{ code }}">
                                 <td></td>
                                 <td colspan="3" class="ps-4 small">
                                     {{ trans.transaction_date.strftime('%Y-%m-%d') }}
@@ -214,6 +214,137 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // 展开状态追踪
+    let expandState = {
+        markets: false,
+        stocks: false,
+        transactions: false
+    };
+
+    // 收起状态追踪
+    let collapseState = {
+        markets: true,
+        stocks: true,
+        transactions: true
+    };
+
+    // 展开按钮点击处理
+    document.getElementById('expandAll').addEventListener('click', function() {
+        if (!expandState.markets) {
+            // 第一次点击：只展开市场
+            document.querySelectorAll('.market-row').forEach(row => {
+                const icon = row.querySelector('.toggle-market i');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                const market = row.dataset.market;
+                document.querySelectorAll(`.stock-row[data-market="${market}"]`).forEach(stockRow => {
+                    stockRow.classList.remove('d-none');
+                });
+            });
+            expandState.markets = true;
+        } else if (!expandState.stocks) {
+            // 第二次点击：展开所有股票
+            document.querySelectorAll('.stock-row:not(.d-none)').forEach(row => {
+                const icon = row.querySelector('.toggle-stock i');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                const market = row.dataset.market;
+                const code = row.dataset.code;
+                document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`).forEach(transRow => {
+                    transRow.classList.remove('d-none');
+                });
+            });
+            expandState.stocks = true;
+        } else if (!expandState.transactions) {
+            // 第三次点击：展开所有交易记录
+            document.querySelectorAll('.transaction-row').forEach(row => {
+                row.classList.remove('d-none');
+            });
+            expandState.transactions = true;
+        }
+
+        // 重置收起状态
+        collapseState = {
+            markets: true,
+            stocks: true,
+            transactions: true
+        };
+    });
+
+    document.getElementById('collapseAll').addEventListener('click', function() {
+        if (collapseState.transactions) {
+            // 第一次点击：收起所有交易记录
+            document.querySelectorAll('.transaction-row').forEach(row => {
+                row.classList.add('d-none');
+            });
+            document.querySelectorAll('.stock-row .toggle-stock i.fa-chevron-down').forEach(icon => {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.transactions = false;
+            expandState.transactions = false;
+        } else if (collapseState.stocks) {
+            // 第二次点击：收起所有股票
+            document.querySelectorAll('.stock-row').forEach(row => {
+                row.classList.add('d-none');
+            });
+            document.querySelectorAll('.market-row .toggle-market i.fa-chevron-down').forEach(icon => {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.stocks = false;
+            expandState.stocks = false;
+        } else if (collapseState.markets) {
+            // 第三次点击：收起所有市场
+            document.querySelectorAll('.market-row').forEach(row => {
+                const icon = row.querySelector('.toggle-market i');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.markets = false;
+            expandState.markets = false;
+        }
+    });
+
+    // 市场行点击处理
+    document.querySelectorAll('.market-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'td') {
+                const market = this.dataset.market;
+                const stockRows = document.querySelectorAll(`.stock-row[data-market="${market}"]`);
+                const isHidden = stockRows[0]?.classList.contains('d-none');
+                
+                stockRows.forEach(stockRow => {
+                    stockRow.classList.toggle('d-none', !isHidden);
+                    // 如果收起股票，同时收起其下的交易记录
+                    if (!isHidden) {
+                        const code = stockRow.dataset.code;
+                        document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`)
+                            .forEach(transRow => transRow.classList.add('d-none'));
+                    }
+                });
+            }
+        });
+    });
+
+    // 股票行点击处理
+    document.querySelectorAll('.stock-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'td') {
+                const market = this.dataset.market;
+                const code = this.dataset.code;
+                const transactionRows = document.querySelectorAll(
+                    `.transaction-row[data-market="${market}"][data-code="${code}"]`
+                );
+                const isHidden = transactionRows[0]?.classList.contains('d-none');
+                
+                transactionRows.forEach(transRow => {
+                    transRow.classList.toggle('d-none', !isHidden);
+                });
+            }
+        });
+    });
+
     // 初始更新市值
     updateMarketValue();
     
@@ -228,110 +359,6 @@ document.addEventListener('DOMContentLoaded', function() {
             button.disabled = false;
             button.innerHTML = originalHtml;
         });
-    });
-
-    // 默认展开有持仓的股票所在的市场
-    document.querySelectorAll('.stock-row').forEach(stockRow => {
-        if (!stockRow.classList.contains('d-none')) {
-            const market = stockRow.dataset.market;
-            const marketRow = document.querySelector(`.market-row[data-market="${market}"]`);
-            const marketButton = marketRow.querySelector('.toggle-market');
-            const marketIcon = marketButton.querySelector('i');
-            
-            marketIcon.classList.remove('fa-chevron-right');
-            marketIcon.classList.add('fa-chevron-down');
-        }
-    });
-
-    // 市场展开/收起
-    document.querySelectorAll('.toggle-market').forEach(button => {
-        button.addEventListener('click', function() {
-            const marketRow = this.closest('tr');
-            const market = marketRow.dataset.market;
-            const icon = this.querySelector('i');
-            const stockRows = document.querySelectorAll(`.stock-row[data-market="${market}"]`);
-            
-            icon.classList.toggle('fa-chevron-right');
-            icon.classList.toggle('fa-chevron-down');
-            
-            stockRows.forEach(row => {
-                row.classList.toggle('d-none');
-                // 收起时同时收起交易记录
-                if (row.classList.contains('d-none')) {
-                    const code = row.dataset.code;
-                    document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`)
-                        .forEach(tr => tr.classList.add('d-none'));
-                    row.querySelector('.toggle-stock i').classList.remove('fa-chevron-down');
-                    row.querySelector('.toggle-stock i').classList.add('fa-chevron-right');
-                }
-            });
-        });
-    });
-    
-    // 股票展开/收起
-    document.querySelectorAll('.toggle-stock').forEach(button => {
-        button.addEventListener('click', function() {
-            const stockRow = this.closest('tr');
-            const market = stockRow.dataset.market;
-            const code = stockRow.dataset.code;
-            const icon = this.querySelector('i');
-            const transactionRows = document.querySelectorAll(
-                `.transaction-row[data-market="${market}"][data-code="${code}"]`
-            );
-            
-            icon.classList.toggle('fa-chevron-right');
-            icon.classList.toggle('fa-chevron-down');
-            
-            transactionRows.forEach(row => {
-                row.classList.toggle('d-none');
-            });
-        });
-    });
-
-    // 展开全部
-    document.getElementById('expandAll').addEventListener('click', function() {
-        // 获取所有折叠的行
-        const allCollapsedMarketRows = Array.from(document.querySelectorAll('.market-row')).filter(row => {
-            return row.querySelector('.toggle-market i').classList.contains('fa-chevron-right');
-        });
-        const allCollapsedStockRows = Array.from(document.querySelectorAll('.stock-row:not(.d-none)')).filter(row => {
-            return row.querySelector('.toggle-stock i').classList.contains('fa-chevron-right');
-        });
-        
-        if (allCollapsedMarketRows.length > 0) {
-            // 如果有折叠的市场行，先展开市场行
-            allCollapsedMarketRows.forEach(row => {
-                row.querySelector('.toggle-market').click();
-            });
-        } else if (allCollapsedStockRows.length > 0) {
-            // 如果市场行都已展开，且有折叠的股票行，则展开股票行
-            allCollapsedStockRows.forEach(row => {
-                row.querySelector('.toggle-stock').click();
-            });
-        }
-    });
-
-    // 收起全部
-    document.getElementById('collapseAll').addEventListener('click', function() {
-        // 获取所有展开的行
-        const allExpandedStockRows = Array.from(document.querySelectorAll('.stock-row:not(.d-none)')).filter(row => {
-            return row.querySelector('.toggle-stock i').classList.contains('fa-chevron-down');
-        });
-        const allExpandedMarketRows = Array.from(document.querySelectorAll('.market-row')).filter(row => {
-            return row.querySelector('.toggle-market i').classList.contains('fa-chevron-down');
-        });
-        
-        if (allExpandedStockRows.length > 0) {
-            // 如果有展开的股票行，先收起股票行
-            allExpandedStockRows.forEach(row => {
-                row.querySelector('.toggle-stock').click();
-            });
-        } else if (allExpandedMarketRows.length > 0) {
-            // 如果股票行都已收起，且有展开的市场行，则收起市场行
-            allExpandedMarketRows.forEach(row => {
-                row.querySelector('.toggle-market').click();
-            });
-        }
     });
 });
 
