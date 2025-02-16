@@ -9,6 +9,7 @@ const TransactionForm = {
         this.bindKeyboardNavigation();
         this.initFormValidation();
         this.initDateHandling();
+        this.initDepositFeeAutoSave();  // 添加存入证券费自动保存初始化
     },
 
     // 初始化日期处理
@@ -233,10 +234,91 @@ const TransactionForm = {
         });
     },
 
-    // 初始化表单验证和提交
+    // 初始化存入证券费自动保存功能
+    initDepositFeeAutoSave() {
+        const depositFeeInput = document.getElementById('deposit_fee');
+        if (!depositFeeInput) return;
+
+        depositFeeInput.addEventListener('blur', async () => {
+            if (this.isSubmitting) return;  // 如果正在提交，则直接返回
+
+            const form = document.getElementById('transactionForm');
+            const formData = new FormData(form);
+            formData.append('action', 'save_and_add');  // 使用保存并添加下一条的模式
+
+            try {
+                this.isSubmitting = true;
+                
+                // 禁用所有提交按钮
+                form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                    btn.disabled = true;
+                });
+
+                const response = await fetch('/stock/add', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 显示成功提示
+                    this.showSuccess(result.message || '保存成功');
+                    
+                    // 清空表单并重置焦点
+                    this.resetFormAndFocus();
+                } else if (result.error) {
+                    this.showError(result.error);
+                }
+            } catch (error) {
+                console.error('自动保存失败:', error);
+                this.showError('自动保存时发生错误，请重试');
+            } finally {
+                this.isSubmitting = false;
+                // 重新启用提交按钮
+                form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                    btn.disabled = false;
+                });
+            }
+        });
+    },
+
+    // 重置表单并设置焦点
+    resetFormAndFocus() {
+        const form = document.getElementById('transactionForm');
+        const dateInput = document.getElementById('transaction_date');
+        
+        // 清空表单
+        form.reset();
+        
+        // 清空股票代码控件
+        const stockCodeInput = document.getElementById('stock_code');
+        if (stockCodeInput) {
+            StockCodeControl.clearControl(stockCodeInput);
+        }
+        
+        // 清空所有成交明细
+        const tradeDetails = document.getElementById('trade-details');
+        if (tradeDetails) {
+            tradeDetails.innerHTML = '';
+            // 添加一个新的空白成交明细行
+            this.addTradeDetail();
+        }
+        
+        // 清空日期并设置焦点
+        if (dateInput) {
+            dateInput.value = '';
+            // 延迟聚焦，等待其他字段清空后
+            setTimeout(() => {
+                dateInput.focus();
+            }, 100);
+        }
+    },
+
+    // 修改原有的表单提交处理代码
     initFormValidation() {
         const form = document.getElementById('transactionForm');
-        this.isSubmitting = false;  // 添加提交状态标记
+        this.isSubmitting = false;
         
         // 禁用所有输入框的默认回车提交行为
         form.querySelectorAll('input').forEach(input => {
@@ -250,136 +332,63 @@ const TransactionForm = {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            if (this.isSubmitting) return;  // 如果正在提交，则直接返回
+            if (this.isSubmitting) return;
             
-            // 检查必填字段
-            const requiredFields = form.querySelectorAll('[required]');
-            let isValid = true;
-            let firstInvalidField = null;
+            const formData = new FormData(form);
+            const submitButton = document.activeElement;
             
-            requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                    isValid = false;
-                    field.classList.add('is-invalid');
-                    if (!firstInvalidField) firstInvalidField = field;
-                    this.showError(`${field.previousElementSibling.textContent}不能为空`);
-                } else {
-                    field.classList.remove('is-invalid');
-                }
-            });
-            
-            // 检查数值字段
-            const numberFields = form.querySelectorAll('input[type="number"]');
-            numberFields.forEach(field => {
-                const value = field.value.trim();
-                if (value) {
-                    const num = parseFloat(value);
-                    if (isNaN(num) || num < 0) {
-                        isValid = false;
-                        field.classList.add('is-invalid');
-                        if (!firstInvalidField) firstInvalidField = field;
-                        this.showError(`${field.previousElementSibling.textContent}必须是有效的正数`);
-                    } else {
-                        field.classList.remove('is-invalid');
-                    }
-                }
-            });
-            
-            // 检查成交明细
-            const details = document.querySelectorAll('.trade-detail');
-            if (details.length === 0) {
-                isValid = false;
-                this.showError('请至少添加一条成交明细');
-            } else {
-                let hasValidDetail = false;
-                details.forEach(detail => {
-                    const quantity = detail.querySelector('.quantity-input').value.trim();
-                    const price = detail.querySelector('.price-input').value.trim();
-                    if (quantity && price) {
-                        hasValidDetail = true;
-                    }
-                });
-                if (!hasValidDetail) {
-                    isValid = false;
-                    this.showError('请至少填写一条完整的成交明细');
-                }
+            if (submitButton && submitButton.name === 'action') {
+                formData.append('action', submitButton.value);
             }
-            
-            if (isValid) {
-                const action = e.submitter.value;
-                await this.submitForm(action);
-            } else if (firstInvalidField) {
-                firstInvalidField.focus();
+
+            try {
+                this.isSubmitting = true;
+                
+                form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                    btn.disabled = true;
+                });
+
+                const response = await fetch('/stock/add', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    this.showSuccess(result.message || '保存成功');
+                    
+                    if (submitButton.value === 'save_and_add') {
+                        this.resetFormAndFocus();  // 使用统一的重置方法
+                    } else if (result.redirect) {
+                        setTimeout(() => {
+                            window.location.href = result.redirect;
+                        }, 1500);
+                    }
+                    return;
+                } else if (result.error) {
+                    this.showError(result.error);
+                }
+            } catch (error) {
+                console.error('提交失败:', error);
+                this.showError('提交时发生错误，请重试');
+            } finally {
+                this.isSubmitting = false;
+                form.querySelectorAll('button[type="submit"]').forEach(btn => {
+                    btn.disabled = false;
+                });
             }
         });
-    },
-
-    // 提交表单
-    async submitForm(action) {
-        try {
-            // 获取表单数据
-            const form = document.getElementById('transactionForm');
-            const formData = new FormData(form);
-            formData.append('action', action);
-            
-            // 发送请求
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.showSuccess(result.message);
-                
-                if (action === 'save_and_add') {
-                    // 重置表单
-                    form.reset();
-                    
-                    // 清除股票代码控件
-                    const stockCodeInput = document.getElementById('stock_code');
-                    if (stockCodeInput) {
-                        StockCodeControl.clearControl(stockCodeInput);
-                    }
-                    
-                    // 清除所有成交明细
-                    const tradeDetails = document.getElementById('trade-details');
-                    if (tradeDetails) {
-                        tradeDetails.innerHTML = '';
-                        // 添加一个新的空白成交明细行
-                        this.addTradeDetail();
-                    }
-                    
-                    // 设置默认日期
-                    this.setDefaultDate();
-                    
-                    // 将焦点设置到交易日期输入框
-                    const dateInput = document.getElementById('transaction_date');
-                    if (dateInput) {
-                        dateInput.focus();
-                    }
-                } else {
-                    // 普通保存，跳转到列表页
-                    window.location.href = '/stock/list';
-                }
-            } else {
-                this.showError(result.message || '保存失败');
-            }
-        } catch (error) {
-            console.error('提交表单时出错:', error);
-            this.showError('提交表单时发生错误');
-        }
     },
 
     // 显示成功提示
     showSuccess(message) {
         Toastify({
             text: message,
-            duration: 3000,
+            duration: 2000,
             gravity: "top",
-            position: 'right',
-            backgroundColor: "#4caf50"
+            position: "center",
+            backgroundColor: "#28a745"
         }).showToast();
     },
 
@@ -389,8 +398,8 @@ const TransactionForm = {
             text: message,
             duration: 3000,
             gravity: "top",
-            position: 'right',
-            backgroundColor: "#f44336"
+            position: "center",
+            backgroundColor: "#dc3545"
         }).showToast();
     }
 };

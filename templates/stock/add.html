@@ -10,7 +10,7 @@
                 <h4 class="mb-0">添加交易记录</h4>
             </div>
             <div class="card-body">
-                <form method="post" id="transactionForm" action="{{ url_for('stock.add') }}" onsubmit="return false">
+                <form method="post" id="transactionForm" action="{{ url_for('stock.add') }}">
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label">交易日期</label>
@@ -237,20 +237,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化交易表单控制模块
     TransactionForm.init();
-
-    // 阻止表单默认提交
-    document.getElementById('transactionForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-    });
-
-    // 禁用所有输入框的默认回车提交行为
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-            }
-        });
-    });
 
     // 添加交易编号输入框的失焦事件处理
     document.getElementById('transaction_code').addEventListener('blur', async function() {

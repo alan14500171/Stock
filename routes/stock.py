@@ -463,101 +463,122 @@ def list():
 @stock_bp.route('/stock/add', methods=['GET', 'POST'])
 @login_required
 def add():
-    if request.method == 'GET':
-        return render_template('stock/add.html')
-    
-    try:
-        # 获取表单数据
-        market = request.form['market']
-        transaction_date = request.form['transaction_date']
-        transaction_code = request.form['transaction_code']
-        stock_code = request.form['stock_code']
-        
-        # 检查交易编号是否已存在
-        existing_transaction = StockTransaction.query.filter_by(
-            transaction_code=transaction_code
-        ).first()
-        if existing_transaction:
-            return jsonify({
-                'success': False,
-                'error': '交易编号已存在，请使用其他编号'
-            })
-        
-        # 如果是非港股市场，获取汇率
-        exchange_rate = None
-        if market != 'HK':
-            currency = 'USD'  # 统一使用USD作为货币代码
-            exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
-            if exchange_rate is None:
+    if request.method == 'POST':
+        try:
+            # 获取基本信息
+            transaction_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d')
+            stock_code = request.form.get('stock_code')
+            market = request.form.get('market')
+            transaction_code = request.form.get('transaction_code')
+            transaction_type = request.form.get('transaction_type')
+            
+            # 检查交易编号是否已存在
+            existing_transaction = StockTransaction.query.filter_by(
+                user_id=session['user_id'],
+                transaction_code=transaction_code
+            ).first()
+            if existing_transaction:
                 return jsonify({
                     'success': False,
-                    'error': f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试'
+                    'error': '交易编号已存在，请使用其他编号'
                 })
-        
-        # 开始事务
-        try:
-            # 创建交易主记录
-            transaction = StockTransaction(
-                user_id=session['user_id'],
-                transaction_code=transaction_code,
-                stock_code=stock_code,
-                market=market,
-                transaction_type=request.form['transaction_type'],
-                transaction_date=datetime.strptime(transaction_date, '%Y-%m-%d'),
-                exchange_rate=exchange_rate,
-                broker_fee=float(request.form.get('broker_fee', 0)),
-                stamp_duty=float(request.form.get('stamp_duty', 0)),
-                transaction_levy=float(request.form.get('transaction_levy', 0)),
-                trading_fee=float(request.form.get('trading_fee', 0)),
-                clearing_fee=float(request.form.get('clearing_fee', 0)),
-                deposit_fee=float(request.form.get('deposit_fee', 0))
-            )
-            db.session.add(transaction)
-            db.session.flush()  # 获取transaction.id
             
-            # 处理成交明细
+            # 如果是非港股市场，获取汇率
+            exchange_rate = None
+            if market != 'HK':
+                currency = 'USD'  # 统一使用USD作为货币代码
+                exchange_rate = ensure_exchange_rate_exists(currency, transaction_date.strftime('%Y-%m-%d'))
+                if exchange_rate is None:
+                    return jsonify({
+                        'success': False,
+                        'error': f'无法获取 {transaction_date.strftime("%Y-%m-%d")} 的{currency}汇率，请稍后重试'
+                    })
+            
+            # 处理费用字段，确保空值转换为0
+            def get_fee(field_name):
+                value = request.form.get(field_name, '0')
+                return float(value) if value.strip() else 0.0
+            
+            # 获取费用信息
+            broker_fee = get_fee('broker_fee')
+            transaction_levy = get_fee('transaction_levy')
+            stamp_duty = get_fee('stamp_duty')
+            trading_fee = get_fee('trading_fee')
+            deposit_fee = get_fee('deposit_fee')
+            
+            # 获取成交明细
             quantities = request.form.getlist('quantities[]')
             prices = request.form.getlist('prices[]')
             
             if not quantities or not prices:
-                raise ValueError('请至少添加一条成交明细')
+                return jsonify({
+                    'success': False,
+                    'error': '请至少添加一条成交记录'
+                })
             
+            # 创建交易记录
+            transaction = StockTransaction(
+                user_id=session['user_id'],
+                transaction_date=transaction_date,
+                stock_code=stock_code,
+                market=market,
+                transaction_code=transaction_code,
+                transaction_type=transaction_type,
+                exchange_rate=exchange_rate,
+                broker_fee=broker_fee,
+                transaction_levy=transaction_levy,
+                stamp_duty=stamp_duty,
+                trading_fee=trading_fee,
+                deposit_fee=deposit_fee
+            )
+            
+            # 添加成交明细
             for quantity, price in zip(quantities, prices):
-                if quantity and price:  # 确保数量和价格都有值
-                    detail = StockTransactionDetail(
-                        transaction_id=transaction.id,
-                        quantity=int(quantity),
-                        price=float(price)
-                    )
-                    db.session.add(detail)
+                if not quantity or not price:
+                    continue
+                detail = StockTransactionDetail(
+                    quantity=int(quantity),
+                    price=float(price)
+                )
+                transaction.details.append(detail)
             
-            # 提交事务
+            if not transaction.details:
+                return jsonify({
+                    'success': False,
+                    'error': '请至少添加一条有效的成交记录'
+                })
+            
+            db.session.add(transaction)
             db.session.commit()
             
-            return jsonify({
-                'success': True,
-                'message': '交易记录添加成功',
-                'redirect': url_for('stock.list') if request.form.get('action') == 'save' else url_for('stock.add')
-            })
-            
-        except ValueError as ve:
+            action = request.form.get('action')
+            if action == 'save_and_add':
+                return jsonify({
+                    'success': True,
+                    'message': '保存成功',
+                    'redirect': url_for('stock.add')
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'message': '保存成功',
+                    'redirect': url_for('stock.list')
+                })
+                
+        except ValueError as e:
             db.session.rollback()
             return jsonify({
                 'success': False,
-                'error': str(ve)
+                'error': f'输入数据格式错误: {str(e)}'
             })
-            
         except Exception as e:
             db.session.rollback()
-            raise  # 重新抛出异常，让外层捕获
-            
-    except Exception as e:
-        # 记录详细错误信息
-        print(f'添加交易记录时发生错误: {str(e)}')
-        return jsonify({
-            'success': False,
-            'error': f'添加交易记录失败: {str(e)}'
-        })
+            return jsonify({
+                'success': False,
+                'error': f'保存失败: {str(e)}'
+            })
+    
+    return render_template('stock/add.html')
 
 @stock_bp.route('/stock/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
