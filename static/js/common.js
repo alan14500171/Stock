@@ -107,6 +107,9 @@ const CommonUtils = {
      */
     initMarketSelects: function(selector = 'select[name="market"]', showEmpty = true) {
         document.querySelectorAll(selector).forEach(select => {
+            // 保存当前选中的值
+            const currentValue = select.value;
+            
             // 清空现有选项
             select.innerHTML = '';
             
@@ -123,8 +126,8 @@ const CommonUtils = {
                 const option = document.createElement('option');
                 option.value = value;
                 option.textContent = text;
-                // 如果是HK市场，设置为选中状态
-                if (value === 'HK') {
+                // 如果与当前选中值相同，则设置为选中状态
+                if (value === currentValue) {
                     option.selected = true;
                 }
                 select.appendChild(option);
