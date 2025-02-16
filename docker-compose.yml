@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    container_name: stock-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - /volume1/docker/stock-app:/app
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - stock-network
+
+  webhook:
+    image: almir/webhook
+    container_name: stock-webhook
+    ports:
+      - "9000:9000"
+    volumes:
+      - /volume1/docker/stock-app:/app
+      - /volume1/docker/stock-app/hooks.json:/etc/webhook/hooks.json
+    command: -hooks /etc/webhook/hooks.json -verbose
+    restart: always
+    networks:
+      - stock-network
+
+networks:
+  stock-network:
+    driver: bridge 
