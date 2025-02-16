@@ -108,33 +108,33 @@
                                 </td>
                             </tr>
                             
-                            <!-- 持仓股票分类 -->
+                            <!-- 持仓分类 -->
                             <tr class="holding-row d-none" data-market="{{ market }}" data-holding="true">
                                 <td>
                                     <button class="btn btn-sm btn-link p-0 toggle-holding ms-2">
                                         <i class="fas fa-chevron-right"></i>
                                     </button>
                                 </td>
-                                <td></td>
-                                <td class="text-start ps-4">持仓股票</td>
-                                <td colspan="11"></td>
+                                <td>{{ market }}</td>
+                                <td colspan="12">持仓股票</td>
                             </tr>
                             
                             {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity > 0 %}
-                            <!-- 持仓股票行 -->
                             <tr class="stock-row d-none" data-market="{{ market }}" data-code="{{ code }}" data-holding="true">
                                 <td>
                                     <button class="btn btn-sm btn-link p-0 toggle-stock ms-3">
                                         <i class="fas fa-chevron-right"></i>
                                     </button>
                                 </td>
-                                <td></td>
+                                <td>{{ market }}</td>
                                 <td>{{ code }}
                                     {% if stock.stock_name %}
                                     <small class="text-muted ms-1">{{ stock.stock_name }}</small>
                                     {% endif %}
                                 </td>
-                                <td class="text-end fw-bold">{{ stock.current_quantity }}</td>
+                                <td class="text-end {{ 'fw-bold' if stock.current_quantity > 0 }}">
+                                    {{ stock.current_quantity }}
+                                </td>
                                 <td class="text-end">{{ stock.transaction_count }}</td>
                                 <td class="text-end text-danger">{{ "{:,.2f}".format(stock.total_buy) }}</td>
                                 <td class="text-end">{{ "{:.3f}".format(stock.avg_cost) if stock.avg_cost > 0 else '-' }}</td>
@@ -153,12 +153,11 @@
                                 </td>
                             </tr>
                             
-                            <!-- 持仓股票的交易记录 -->
+                            <!-- 该股票的详细交易记录 -->
                             {% for trans in stock.transactions %}
                             <tr class="transaction-row d-none" data-market="{{ market }}" data-code="{{ code }}">
                                 <td></td>
-                                <td></td>
-                                <td colspan="2" class="ps-4 small">
+                                <td colspan="3" class="ps-4 small">
                                     {{ trans.transaction_date.strftime('%Y-%m-%d') }}
                                     <span class="badge {{ 'bg-danger' if trans.transaction_type == 'BUY' else 'bg-success' }}">
                                         {{ '买入' if trans.transaction_type == 'BUY' else '卖出' }}
@@ -175,7 +174,13 @@
                                         -
                                     {% endif %}
                                 </td>
-                                <td class="text-end small">{{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}</td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'BUY' %}
+                                        {{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}
+                                    {% else %}
+                                        {{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}
+                                    {% endif %}
+                                </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'SELL' %}
                                         {{ "{:,.2f}".format(trans.total_amount) }}
@@ -209,33 +214,33 @@
                             {% endfor %}
                             {% endfor %}
                             
-                            <!-- 已清仓股票分类 -->
+                            <!-- 未持仓分类 -->
                             <tr class="holding-row d-none" data-market="{{ market }}" data-holding="false">
                                 <td>
                                     <button class="btn btn-sm btn-link p-0 toggle-holding ms-2">
                                         <i class="fas fa-chevron-right"></i>
                                     </button>
                                 </td>
-                                <td></td>
-                                <td class="text-start ps-4">已清仓股票</td>
-                                <td colspan="11"></td>
+                                <td>{{ market }}</td>
+                                <td colspan="12">已清仓股票</td>
                             </tr>
                             
                             {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity == 0 %}
-                            <!-- 已清仓股票行 -->
                             <tr class="stock-row d-none" data-market="{{ market }}" data-code="{{ code }}" data-holding="false">
                                 <td>
                                     <button class="btn btn-sm btn-link p-0 toggle-stock ms-3">
                                         <i class="fas fa-chevron-right"></i>
                                     </button>
                                 </td>
-                                <td></td>
+                                <td>{{ market }}</td>
                                 <td>{{ code }}
                                     {% if stock.stock_name %}
                                     <small class="text-muted ms-1">{{ stock.stock_name }}</small>
                                     {% endif %}
                                 </td>
-                                <td class="text-end">{{ stock.current_quantity }}</td>
+                                <td class="text-end {{ 'fw-bold' if stock.current_quantity > 0 }}">
+                                    {{ stock.current_quantity }}
+                                </td>
                                 <td class="text-end">{{ stock.transaction_count }}</td>
                                 <td class="text-end text-danger">{{ "{:,.2f}".format(stock.total_buy) }}</td>
                                 <td class="text-end">{{ "{:.3f}".format(stock.avg_cost) if stock.avg_cost > 0 else '-' }}</td>
@@ -251,60 +256,6 @@
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.profit_rate > 0 else 'text-danger' }}">
                                     {{ "{:.1f}%".format(stock.profit_rate) }}
-                                </td>
-                            </tr>
-                            
-                            <!-- 已清仓股票的交易记录 -->
-                            {% for trans in stock.transactions %}
-                            <tr class="transaction-row d-none" data-market="{{ market }}" data-code="{{ code }}">
-                                <td></td>
-                                <td></td>
-                                <td colspan="2" class="ps-4 small">
-                                    {{ trans.transaction_date.strftime('%Y-%m-%d') }}
-                                    <span class="badge {{ 'bg-danger' if trans.transaction_type == 'BUY' else 'bg-success' }}">
-                                        {{ '买入' if trans.transaction_type == 'BUY' else '卖出' }}
-                                    </span>
-                                    <small class="text-muted">{{ trans.transaction_code }}</small>
-                                </td>
-                                <td class="text-end small">{{ trans.total_quantity }}股{% if trans.average_price is not none %}@{{ "%.3f"|format(trans.average_price) }}{% endif %}</td>
-                                <td class="text-end small">
-                                    {% if trans.transaction_type == 'BUY' %}
-                                        {{ "{:,.2f}".format(trans.total_amount) }}
-                                        <br>
-                                        <small class="text-muted">均价成本: {{ "%.3f"|format(trans.fifo_price) if trans.fifo_price is not none else '-' }}</small>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td class="text-end small">{{ "{:.3f}".format(trans.fifo_price) if trans.fifo_price is not none else '-' }}</td>
-                                <td class="text-end small">
-                                    {% if trans.transaction_type == 'SELL' %}
-                                        {{ "{:,.2f}".format(trans.total_amount) }}
-                                        <br>
-                                        <small class="text-muted">@ {{ "%.3f"|format(trans.average_price) if trans.average_price is not none else '-' }}</small>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td class="text-end small">{{ "{:,.2f}".format(trans.total_fees) }}</td>
-                                <td class="text-end small">
-                                    {% if trans.transaction_type == 'SELL' %}
-                                        <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
-                                            {{ "{:,.2f}".format(trans.profit) }}
-                                            <br>
-                                            <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
-                                        </span>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td class="text-end small">-</td>
-                                <td class="text-end small">-</td>
-                                <td class="text-end small">-</td>
-                                <td class="text-end small text-muted">
-                                    {% if trans.exchange_rate %}
-                                    汇率: {{ "{:.3f}".format(trans.exchange_rate) }}
-                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -316,8 +267,6 @@
         </div>
     </div>
 </div>
-
-{% endfor %}  <!-- 关闭最外层的市场循环 -->
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -668,4 +617,4 @@ $(document).ready(function() {
     });
 });
 </script>
-{% endblock %} 
+{% endblock %}
