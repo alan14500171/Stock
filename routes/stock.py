@@ -805,31 +805,32 @@ def stats():
 
 @stock_bp.route('/stocks')
 @login_required
-def stock_list():
-    """股票列表页面"""
+def stocks():
     # 获取查询参数
     market = request.args.get('market', '')
     keyword = request.args.get('keyword', '')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = 15  # 每页显示15条记录
+
     # 构建查询
     query = Stock.query
-    
-    # 添加市场过滤
     if market:
         query = query.filter(Stock.market == market)
-    
-    # 添加关键字搜索
     if keyword:
-        query = query.filter(db.or_(
+        query = query.filter(or_(
             Stock.code.ilike(f'%{keyword}%'),
-            Stock.name.ilike(f'%{keyword}%'),
-            Stock.full_name.ilike(f'%{keyword}%')
+            Stock.name.ilike(f'%{keyword}%')
         ))
-    
-    # 按市场和代码排序
-    stocks = query.order_by(Stock.market, Stock.code).all()
-    
-    return render_template('stock/stocks.html', stocks=stocks)
+
+    # 应用分页
+    pagination = query.order_by(Stock.market.asc(), Stock.code.asc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return render_template('stock/stocks.html', 
+                         pagination=pagination,
+                         market=market,
+                         keyword=keyword)
 
 @stock_bp.route('/stocks/add', methods=['POST'])
 @login_required
