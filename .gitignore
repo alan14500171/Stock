@@ -41,4 +41,8 @@ deploy.log
 
 # 数据库
 *.db
-*.sqlite3 
+*.sqlite3
+
+# macOS system files
+.DS_Store
+**/.DS_Store 
