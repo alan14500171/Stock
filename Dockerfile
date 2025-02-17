@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 # 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # 暴露端口
-EXPOSE 3000
+EXPOSE 9009
 
 # 启动命令
-CMD ["python", "main.py"] 
+CMD ["python", "app.py"] 

@@ -3,7 +3,10 @@ from datetime import timedelta
 
 class Config:
     # 基础配置
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev')
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
+    PORT = 9009
+    HOST = '0.0.0.0'
+    DEBUG = True
     
     # 数据库配置
     SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:Zxc000123@192.168.0.109:3306/Stock'

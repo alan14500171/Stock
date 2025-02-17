@@ -5,27 +5,31 @@ services:
     build: .
     container_name: stock-app
     ports:
-      - "3000:3000"
+      - "9009:9009"
     volumes:
       - /volume1/docker/stock-app:/app
     restart: always
     environment:
       - TZ=Asia/Shanghai
     networks:
-      - stock-network
+      stock-network:
+        aliases:
+          - stock-app
 
   webhook:
     image: almir/webhook
     container_name: stock-webhook
-    ports:
-      - "9000:9000"
+    expose:
+      - "9000"
     volumes:
       - /volume1/docker/stock-app:/app
       - /volume1/docker/stock-app/hooks.json:/etc/webhook/hooks.json
     command: -hooks /etc/webhook/hooks.json -verbose
     restart: always
     networks:
-      - stock-network
+      stock-network:
+        aliases:
+          - webhook-service
 
 networks:
   stock-network:
