@@ -1,8 +1,18 @@
 [
   {
-    "id": "stock-deploy",
+    "id": "stock-app-deploy",
     "execute-command": "/volume1/docker/stock-app/deploy.sh",
     "command-working-directory": "/volume1/docker/stock-app",
-    "response-message": "Deploying stock app using docker-compose..."
+    "response-message": "Deploying stock-app...",
+    "trigger-rule": {
+      "match": {
+        "type": "payload-hash-sha1",
+        "secret": "your-secret-key",
+        "parameter": {
+          "source": "header",
+          "name": "X-Gogs-Signature"
+        }
+      }
+    }
   }
 ]
