@@ -178,7 +178,7 @@ SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://用户名:密码@主机:端口/Stock'
 python main.py
 ```
 
-访问 http://localhost:3000 即可使用系统。
+访问 http://localhost:9009 即可使用系统。
 
 ## 使用说明
 1. 用户管理
@@ -239,7 +239,7 @@ python main.py
 ## 注意事项
 - 这是一个开发版本，不建议在生产环境中直接使用
 - 使用前请确保MySQL服务已启动
-- 默认监听3000端口，如需修改，请在main.py中更改
+- 默认监听9009端口，如需修改，请在main.py中更改
 - 股票数据来源于Yahoo Finance，可能存在延迟或不准确
 - 建议定期备份数据库
 
@@ -272,7 +272,7 @@ python main.py
 ## 注意事项
 - 这是一个开发版本，不建议在生产环境中直接使用
 - 使用前请确保MySQL服务已启动
-- 默认监听3000端口，如需修改，请在main.py中更改
+- 默认监听9009端口，如需修改，请在main.py中更改
 - 股票数据来源于Yahoo Finance，可能存在延迟或不准确
 - 建议定期备份数据库
 
