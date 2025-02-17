@@ -1,0 +1,11 @@
+--- webhook.go.orig
++++ webhook.go
+@@ -123,11 +123,6 @@
+        if len(w.URL) == 0 {
+                return errors.New("webhook URL cannot be empty")
+        }
+-       if !webhook.IsValidHookURL(w.URL) {
+-               return errors.New("webhook URL resolved to a local network address that is implicitly blocked")
+-       }
+        return nil
+ } 
