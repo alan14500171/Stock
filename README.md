@@ -296,4 +296,12 @@ python main.py
 - [ ] 批量导入交易记录
 - [ ] 自定义费用计算规则
 - [ ] 多币种支持
-- [ ] 移动端适配优化 
+- [ ] 移动端适配优化
+
+## Port Change Notice
+
+The application now runs on port 9009 instead of 3000 to avoid conflicts with Gogs.
+
+## Webhook Test
+
+This is a test commit to verify the webhook deployment. 
