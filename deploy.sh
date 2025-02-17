@@ -1,16 +1,10 @@
 #!/bin/bash
-
-# 设置工作目录
 cd /volume1/docker/stock-app
 
-# 拉取最新代码
-git pull
+# 使用docker容器执行git pull
+sudo docker run --rm -v /volume1/docker/stock-app:/app -w /app alpine/git pull
 
-# 重新构建并启动容器
-docker-compose up -d --build web
-
-# 清理未使用的镜像
-docker image prune -f
-
-# 输出日志
-echo "Deployment completed at $(date)" >> /volume1/docker/stock-app/deploy.log 
+# 重新构建和启动服务
+sudo /usr/local/bin/docker-compose up -d --build web
+sudo /usr/local/bin/docker image prune -f
+echo "Deployment completed at $(date)" >> /volume1/docker/stock-app/deploy.log
