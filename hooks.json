@@ -1,7 +1,7 @@
 [
   {
     "id": "stock-deploy",
-    "execute-command": "/volume1/docker/stock-app/deploy.sh",
+    "execute-command": "sudo /volume1/docker/stock-app/deploy.sh",
     "command-working-directory": "/volume1/docker/stock-app",
     "response-message": "Deploying stock app..."
   }
