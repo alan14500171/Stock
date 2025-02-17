@@ -20,19 +20,12 @@ services:
   webhook:
     image: almir/webhook
     container_name: stock-webhook
-    expose:
-      - "9000"
-    ports:
-      - "9000:9000"
+    network_mode: "host"
     volumes:
       - /volume1/docker/stock-app:/volume1/docker/stock-app
       - /volume1/docker/stock-app/hooks.json:/etc/webhook/hooks.json
     command: -hooks /etc/webhook/hooks.json -verbose
     restart: always
-    networks:
-      stock-network:
-        aliases:
-          - webhook-service
 
 networks:
   stock-network:
