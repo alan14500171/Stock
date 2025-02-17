@@ -14,6 +14,19 @@ logging.basicConfig(
     ]
 )
 
+def setup_git_credentials():
+    try:
+        # 配置 Git 凭据存储
+        subprocess.check_call(["sudo", "/volume1/@appstore/Git/bin/git", "config", "--global", "credential.helper", "store"])
+        # 创建凭据文件
+        credentials = "https://alan:gogs-12345@192.168.0.109:3000"
+        home_dir = os.path.expanduser("~")
+        with open(os.path.join(home_dir, ".git-credentials"), "w") as f:
+            f.write(credentials)
+        logging.info("Git 凭据配置完成")
+    except Exception as e:
+        logging.error(f"配置 Git 凭据时出错: {str(e)}")
+
 def check_and_update():
     try:
         repo_path = "/volume1/docker/stock-app"
@@ -61,6 +74,9 @@ def check_and_update():
 
 def main():
     repo_path = "/volume1/docker/stock-app"
+    
+    # 配置 Git 凭据
+    setup_git_credentials()
     
     # 确保目录是一个 Git 仓库
     if not os.path.exists(os.path.join(repo_path, ".git")):
