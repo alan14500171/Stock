@@ -1,6 +1,10 @@
 #!/bin/bash
 cd /volume1/docker/stock-app
 
+# 拉取最新代码
+sudo /usr/local/bin/docker run --rm -v /volume1/docker/stock-app:/app -w /app alpine/git config --global --add safe.directory /app
+sudo /usr/local/bin/docker run --rm -v /volume1/docker/stock-app:/app -w /app alpine/git pull
+
 # 重新构建和启动服务
 sudo /usr/local/bin/docker-compose up -d --build web
 
