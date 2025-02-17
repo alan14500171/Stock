@@ -1,0 +1,831 @@
+{% extends "base.html" %}
+
+{% block title %}盈利统计{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">盈利统计</h4>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#searchForm">
+                        <i class="fas fa-search"></i> 搜索
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshMarketValue">
+                        <i class="fas fa-sync-alt"></i> 刷新市值
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="expandAll">
+                        <i class="fas fa-expand-alt"></i> 展开
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="collapseAll">
+                        <i class="fas fa-compress-alt"></i> 收起
+                    </button>
+                    <a href="{{ url_for('stock.add') }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus"></i> 添加记录
+                    </a>
+                </div>
+            </div>
+
+            <!-- 搜索表单 -->
+            <div class="collapse" id="searchForm">
+                <div class="card-body border-bottom">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label small">开始日期</label>
+                            <input type="date" class="form-control form-control-sm" name="start_date" value="{{ request.args.get('start_date', '') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">结束日期</label>
+                            <input type="date" class="form-control form-control-sm" name="end_date" value="{{ request.args.get('end_date', '') }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">股票代码</label>
+                            <select class="form-select form-select-sm" name="stock_codes" id="stockCodesSelect" multiple>
+                                {% for code in all_stock_codes %}
+                                <option value="{{ code }}" {% if code in selected_stock_codes %}selected{% endif %}>{{ code }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">查询</button>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <a href="{{ url_for('stock.stats') }}" class="btn btn-sm btn-outline-secondary w-100">重置</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 30px"></th>
+                                <th style="width: 50px">市场</th>
+                                <th style="width: 80px">代码</th>
+                                <th class="text-end" style="width: 60px">数量</th>
+                                <th class="text-end" style="width: 50px">笔数</th>
+                                <th class="text-end" style="width: 100px">买入总额</th>
+                                <th class="text-end" style="width: 80px">平均价格</th>
+                                <th class="text-end" style="width: 100px">卖出总额</th>
+                                <th class="text-end" style="width: 80px">费用</th>
+                                <th class="text-end" style="width: 100px">盈亏</th>
+                                <th class="text-end" style="width: 80px">现价</th>
+                                <th class="text-end" style="width: 100px">持仓价值</th>
+                                <th class="text-end" style="width: 100px">总盈亏</th>
+                                <th class="text-end" style="width: 60px">盈亏率</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for market, stats in market_stats.items() %}
+                            <!-- 市场汇总行 -->
+                            <tr class="market-row fw-bold" data-market="{{ market }}">
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 toggle-market">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </td>
+                                <td>{{ market }}</td>
+                                <td>市场汇总</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end">{{ stats.transaction_count }}</td>
+                                <td class="text-end text-danger">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.total_buy_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.total_buy) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">-</td>
+                                <td class="text-end text-success">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.total_sell_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.total_sell) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.total_fees_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.total_fees) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stats.realized_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.realized_profit_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.realized_profit) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">-</td>
+                                <td class="text-end text-success">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.market_value / stats.exchange_rate) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.market_value) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stats.total_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stats.total_profit_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stats.total_profit) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stats.profit_rate > 0 else 'text-danger' }}">
+                                    {{ "{:.1f}%".format(stats.profit_rate) }}
+                                </td>
+                            </tr>
+                            
+                            <!-- 持仓股票分类 -->
+                            <tr class="holding-row d-none" data-market="{{ market }}" data-holding="true">
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 toggle-holding ms-2">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </td>
+                                <td></td>
+                                <td class="text-start ps-4">持仓股票</td>
+                                <td colspan="11"></td>
+                            </tr>
+                            
+                            {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity > 0 %}
+                            <!-- 持仓股票行 -->
+                            <tr class="stock-row d-none" data-market="{{ market }}" data-code="{{ code }}" data-holding="true">
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 toggle-stock ms-3">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </td>
+                                <td></td>
+                                <td>{{ code }}
+                                    {% if stock.stock_name %}
+                                    <small class="text-muted ms-1">{{ stock.stock_name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-bold">{{ stock.current_quantity }}</td>
+                                <td class="text-end">{{ stock.transaction_count }}笔</td>
+                                <td class="text-end text-danger">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_buy_usd) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_buy) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if market == 'USA' %}
+                                        {{ "{:.3f}".format(stock.avg_cost_usd) }} USD
+                                    {% else %}
+                                        {{ "{:.3f}".format(stock.avg_cost) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-success">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_sell_usd) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_sell) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_fees_usd) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_fees) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }} USD
+                                        <br>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }} HKD)</small>
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end current-price">
+                                    {% if market == 'USA' %}
+                                        {{ "{:.3f}".format(stock.current_price) }} USD
+                                    {% else %}
+                                        {{ "{:.3f}".format(stock.current_price) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-success">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.market_value / stock.exchange_rate) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.market_value) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stock.total_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_profit_usd) }} USD
+                                        <br>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }} HKD)</small>
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_profit) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stock.profit_rate > 0 else 'text-danger' }}">
+                                    {{ "{:.1f}%".format(stock.profit_rate) }}
+                                </td>
+                            </tr>
+                            
+                            <!-- 持仓股票的交易记录 -->
+                            {% for trans in stock.transactions %}
+                            <tr class="transaction-row d-none" data-market="{{ market }}" data-code="{{ code }}">
+                                <td></td>
+                                <td></td>
+                                <td colspan="2" class="ps-4 small">
+                                    {{ trans.transaction_date.strftime('%Y-%m-%d') }}
+                                    <span class="badge {{ 'bg-danger' if trans.transaction_type == 'BUY' else 'bg-success' }}">
+                                        {{ '买入' if trans.transaction_type == 'BUY' else '卖出' }}
+                                    </span>
+                                    <small class="text-muted">{{ trans.transaction_code }}</small>
+                                </td>
+                                <td class="text-end small">{{ trans.total_quantity }}股 @ {{ "%.3f"|format(trans.average_price) }}</td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'BUY' %}
+                                        {% if market == 'USA' %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                        {% else %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if market == 'USA' %}
+                                        {{ "%.3f"|format(trans.average_price) }} USD
+                                    {% else %}
+                                        {{ "%.3f"|format(trans.average_price) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'SELL' %}
+                                        {% if market == 'USA' %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                        {% else %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(trans.total_fees) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(trans.total_fees) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'SELL' and trans.profit is defined %}
+                                        <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
+                                            {% if market == 'USA' %}
+                                                {{ "{:,.2f}".format(trans.profit) }} USD
+                                            {% else %}
+                                                {{ "{:,.2f}".format(trans.profit) }} HKD
+                                            {% endif %}
+                                            <br>
+                                            <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small text-muted">
+                                    {% if trans.exchange_rate %}
+                                        汇率: {{ "{:.3f}".format(trans.exchange_rate) }}
+                                        {% if trans.transaction_type == 'SELL' and trans.fifo_cost_details %}
+                                            <br>
+                                            <small>成本明细:</small>
+                                            {% for detail in trans.fifo_cost_details %}
+                                                <br>
+                                                <small>{{ detail.quantity }}股@{{ "%.3f"|format(detail.price) }}</small>
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                            
+                            <!-- 已清仓股票分类 -->
+                            <tr class="holding-row d-none" data-market="{{ market }}" data-holding="false">
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 toggle-holding ms-2">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </td>
+                                <td></td>
+                                <td class="text-start ps-4">已清仓股票</td>
+                                <td colspan="11"></td>
+                            </tr>
+                            
+                            {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity == 0 %}
+                            <!-- 已清仓股票行 -->
+                            <tr class="stock-row d-none" data-market="{{ market }}" data-code="{{ code }}" data-holding="false">
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 toggle-stock ms-3">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </td>
+                                <td></td>
+                                <td>{{ code }}
+                                    {% if stock.stock_name %}
+                                    <small class="text-muted ms-1">{{ stock.stock_name }}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">-</td>
+                                <td class="text-end">{{ stock.transaction_count }}</td>
+                                <td class="text-end text-danger">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_buy_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_buy) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if market == 'USA' %}
+                                        {{ "{:.3f}".format(stock.avg_cost_usd) }}
+                                    {% else %}
+                                        {{ "{:.3f}".format(stock.avg_cost) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-success">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_sell_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_sell) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_fees_usd) }}
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_fees) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }}
+                                        <br>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }})</small>
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">-</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end {{ 'text-success' if stock.total_profit > 0 else 'text-danger' }}">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(stock.total_profit_usd) }}
+                                        <br>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }})</small>
+                                    {% else %}
+                                        {{ "{:,.2f}".format(stock.total_profit) }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end {{ 'text-success' if stock.profit_rate > 0 else 'text-danger' }}">
+                                    {{ "{:.1f}%".format(stock.profit_rate) }}
+                                </td>
+                            </tr>
+                            
+                            <!-- 已清仓股票的交易记录 -->
+                            {% for trans in stock.transactions %}
+                            <tr class="transaction-row d-none" data-market="{{ market }}" data-code="{{ code }}">
+                                <td></td>
+                                <td></td>
+                                <td colspan="2" class="ps-4 small">
+                                    {{ trans.transaction_date.strftime('%Y-%m-%d') }}
+                                    <span class="badge {{ 'bg-danger' if trans.transaction_type == 'BUY' else 'bg-success' }}">
+                                        {{ '买入' if trans.transaction_type == 'BUY' else '卖出' }}
+                                    </span>
+                                    <small class="text-muted">{{ trans.transaction_code }}</small>
+                                </td>
+                                <td class="text-end small">{{ trans.total_quantity }}股 @ {{ "%.3f"|format(trans.average_price) }}</td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'BUY' %}
+                                        {% if market == 'USA' %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                        {% else %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if market == 'USA' %}
+                                        {{ "%.3f"|format(trans.average_price) }} USD
+                                    {% else %}
+                                        {{ "%.3f"|format(trans.average_price) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'SELL' %}
+                                        {% if market == 'USA' %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                        {% else %}
+                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if market == 'USA' %}
+                                        {{ "{:,.2f}".format(trans.total_fees) }} USD
+                                    {% else %}
+                                        {{ "{:,.2f}".format(trans.total_fees) }} HKD
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">
+                                    {% if trans.transaction_type == 'SELL' %}
+                                        <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
+                                            {{ "{:,.2f}".format(trans.profit) }}
+                                            <br>
+                                            <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small">-</td>
+                                <td class="text-end small text-muted">
+                                    {% if trans.exchange_rate %}
+                                    汇率: {{ "{:.3f}".format(trans.exchange_rate) }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endfor %}  <!-- 关闭最外层的市场循环 -->
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 展开状态追踪
+    let expandState = {
+        markets: false,
+        holdings: false,
+        stocks: false,
+        transactions: false
+    };
+
+    // 收起状态追踪
+    let collapseState = {
+        markets: true,
+        holdings: true,
+        stocks: true,
+        transactions: true
+    };
+
+    // 展开按钮点击处理
+    document.getElementById('expandAll').addEventListener('click', function() {
+        if (!expandState.markets) {
+            // 第一次点击：展开市场
+            document.querySelectorAll('.market-row').forEach(row => {
+                const icon = row.querySelector('.toggle-market i');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                const market = row.dataset.market;
+                document.querySelectorAll(`.holding-row[data-market="${market}"]`).forEach(holdingRow => {
+                    holdingRow.classList.remove('d-none');
+                });
+            });
+            expandState.markets = true;
+        } else if (!expandState.holdings) {
+            // 第二次点击：展开持仓分类
+            document.querySelectorAll('.holding-row:not(.d-none)').forEach(row => {
+                const icon = row.querySelector('.toggle-holding i');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                const market = row.dataset.market;
+                const holding = row.dataset.holding;
+                document.querySelectorAll(`.stock-row[data-market="${market}"][data-holding="${holding}"]`).forEach(stockRow => {
+                    stockRow.classList.remove('d-none');
+                });
+            });
+            expandState.holdings = true;
+        } else if (!expandState.stocks) {
+            // 第三次点击：展开股票
+            document.querySelectorAll('.stock-row:not(.d-none)').forEach(row => {
+                const icon = row.querySelector('.toggle-stock i');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                const market = row.dataset.market;
+                const code = row.dataset.code;
+                document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`).forEach(transRow => {
+                    transRow.classList.remove('d-none');
+                });
+            });
+            expandState.stocks = true;
+        } else if (!expandState.transactions) {
+            // 第四次点击：展开所有交易记录
+            document.querySelectorAll('.transaction-row').forEach(row => {
+                row.classList.remove('d-none');
+            });
+            expandState.transactions = true;
+        }
+
+        // 重置收起状态
+        collapseState = {
+            markets: true,
+            holdings: true,
+            stocks: true,
+            transactions: true
+        };
+    });
+
+    // 收起按钮点击处理
+    document.getElementById('collapseAll').addEventListener('click', function() {
+        if (collapseState.transactions) {
+            // 第一次点击：收起所有交易记录
+            document.querySelectorAll('.transaction-row').forEach(row => {
+                row.classList.add('d-none');
+            });
+            document.querySelectorAll('.stock-row .toggle-stock i.fa-chevron-down').forEach(icon => {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.transactions = false;
+            expandState.transactions = false;
+        } else if (collapseState.stocks) {
+            // 第二次点击：收起所有股票
+            document.querySelectorAll('.stock-row').forEach(row => {
+                row.classList.add('d-none');
+            });
+            document.querySelectorAll('.holding-row .toggle-holding i.fa-chevron-down').forEach(icon => {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.stocks = false;
+            expandState.stocks = false;
+        } else if (collapseState.holdings) {
+            // 第三次点击：收起所有持仓分类
+            document.querySelectorAll('.holding-row').forEach(row => {
+                row.classList.add('d-none');
+            });
+            document.querySelectorAll('.market-row .toggle-market i.fa-chevron-down').forEach(icon => {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.holdings = false;
+            expandState.holdings = false;
+        } else if (collapseState.markets) {
+            // 第四次点击：收起所有市场
+            document.querySelectorAll('.market-row').forEach(row => {
+                const icon = row.querySelector('.toggle-market i');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            });
+            collapseState.markets = false;
+            expandState.markets = false;
+        }
+    });
+
+    // 市场行点击处理
+    document.querySelectorAll('.market-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'td') {
+                const market = this.dataset.market;
+                const holdingRows = document.querySelectorAll(`.holding-row[data-market="${market}"]`);
+                const isHidden = holdingRows[0]?.classList.contains('d-none');
+                
+                holdingRows.forEach(holdingRow => {
+                    holdingRow.classList.toggle('d-none', !isHidden);
+                    if (!isHidden) {
+                        // 收起该市场下的所有股票和交易记录
+                        const holding = holdingRow.dataset.holding;
+                        document.querySelectorAll(`.stock-row[data-market="${market}"][data-holding="${holding}"]`)
+                            .forEach(stockRow => {
+                                stockRow.classList.add('d-none');
+                                const code = stockRow.dataset.code;
+                                document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`)
+                                    .forEach(transRow => transRow.classList.add('d-none'));
+                            });
+                    }
+                });
+            }
+        });
+    });
+
+    // 持仓分类行点击处理
+    document.querySelectorAll('.holding-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'td') {
+                const market = this.dataset.market;
+                const holding = this.dataset.holding;
+                const stockRows = document.querySelectorAll(`.stock-row[data-market="${market}"][data-holding="${holding}"]`);
+                const isHidden = stockRows[0]?.classList.contains('d-none');
+                
+                stockRows.forEach(stockRow => {
+                    stockRow.classList.toggle('d-none', !isHidden);
+                    if (!isHidden) {
+                        // 收起该分类下的所有交易记录
+                        const code = stockRow.dataset.code;
+                        document.querySelectorAll(`.transaction-row[data-market="${market}"][data-code="${code}"]`)
+                            .forEach(transRow => transRow.classList.add('d-none'));
+                    }
+                });
+            }
+        });
+    });
+
+    // 股票行点击处理
+    document.querySelectorAll('.stock-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName.toLowerCase() === 'td') {
+                const market = this.dataset.market;
+                const code = this.dataset.code;
+                const transactionRows = document.querySelectorAll(
+                    `.transaction-row[data-market="${market}"][data-code="${code}"]`
+                );
+                const isHidden = transactionRows[0]?.classList.contains('d-none');
+                
+                transactionRows.forEach(transRow => {
+                    transRow.classList.toggle('d-none', !isHidden);
+                });
+            }
+        });
+    });
+
+    // 初始更新市值
+    updateMarketValue();
+    
+    // 刷新按钮点击事件
+    document.getElementById('refreshMarketValue').addEventListener('click', function() {
+        const button = this;
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
+        
+        updateMarketValue().finally(() => {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        });
+    });
+});
+
+// 更新市场价值函数
+async function updateMarketValue() {
+    try {
+        const response = await fetch('/api/portfolio/market-value');
+        const result = await response.json();
+        
+        if (result.success) {
+            const holdings = result.data.holdings;
+            
+            // 更新每个持仓股票的市值
+            holdings.forEach(holding => {
+                const stockRow = document.querySelector(`.stock-row[data-code="${holding.code}"]`);
+                if (stockRow) {
+                    // 更新当前股价列
+                    const currentPriceCell = stockRow.querySelector('.current-price');
+                    if (currentPriceCell) {
+                        currentPriceCell.textContent = new Intl.NumberFormat('zh-HK').format(holding.current_price.toFixed(3));
+                        currentPriceCell.className = 'text-end current-price';
+                    }
+                    
+                    // 更新市值列
+                    const marketValueCell = stockRow.cells[11];
+                    if (marketValueCell) {
+                        marketValueCell.textContent = new Intl.NumberFormat('zh-HK').format(holding.market_value_hkd.toFixed(2));
+                        marketValueCell.className = 'text-end text-success';
+                    }
+                    
+                    // 更新未实现盈亏列
+                    const unrealizedProfitCell = stockRow.cells[12];
+                    if (unrealizedProfitCell) {
+                        unrealizedProfitCell.textContent = new Intl.NumberFormat('zh-HK').format(holding.unrealized_profit.toFixed(2));
+                        unrealizedProfitCell.className = `text-end ${holding.unrealized_profit >= 0 ? 'text-success' : 'text-danger'}`;
+                    }
+                }
+            });
+            
+            // 更新市场汇总行的市值和未实现盈亏
+            document.querySelectorAll('.market-row').forEach(marketRow => {
+                const market = marketRow.dataset.market;
+                const marketHoldings = holdings.filter(h => h.market === market);
+                
+                if (marketHoldings.length > 0) {
+                    const marketValue = marketHoldings.reduce((sum, h) => sum + h.market_value_hkd, 0);
+                    const unrealizedProfit = marketHoldings.reduce((sum, h) => sum + h.unrealized_profit, 0);
+                    
+                    // 更新市值列
+                    const marketValueCell = marketRow.cells[11];
+                    if (marketValueCell) {
+                        marketValueCell.textContent = new Intl.NumberFormat('zh-HK').format(marketValue.toFixed(2));
+                        marketValueCell.className = 'text-end text-success';
+                    }
+                    
+                    // 更新未实现盈亏列
+                    const unrealizedProfitCell = marketRow.cells[12];
+                    if (unrealizedProfitCell) {
+                        unrealizedProfitCell.textContent = new Intl.NumberFormat('zh-HK').format(unrealizedProfit.toFixed(2));
+                        unrealizedProfitCell.className = `text-end ${unrealizedProfit >= 0 ? 'text-success' : 'text-danger'}`;
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('更新市值失败:', error);
+    }
+}
+</script>
+
+<style>
+.toggle-market, .toggle-stock {
+    color: #6c757d;
+    transition: color 0.2s;
+}
+.toggle-market:hover, .toggle-stock:hover {
+    color: #000;
+}
+.transaction-row {
+    background-color: #f8f9fa;
+}
+.table {
+    width: auto;  /* 表格宽度自适应内容 */
+    white-space: nowrap;  /* 防止文本换行 */
+}
+.table > :not(caption) > * > * {
+    padding: 0.25rem 0.35rem;  /* 进一步减小单元格内边距 */
+    font-size: 0.8125rem;      /* 设置基础字体大小为13px */
+}
+.table .small {
+    font-size: 0.75rem;     /* 设置小字体大小为12px */
+}
+.market-row {
+    background-color: #f0f0f0;
+}
+.stock-row {
+    background-color: #f8f8f8;
+}
+.card-header {
+    padding: 0.5rem 1rem;     /* 减小卡片头部内边距 */
+}
+.card-header h4 {
+    font-size: 1.125rem;      /* 设置标题字体大小为18px */
+    margin-bottom: 0;
+}
+.btn-sm {
+    padding: 0.25rem 0.5rem;  /* 调整小按钮的内边距 */
+    font-size: 0.875rem;      /* 设置按钮字体大小为14px */
+}
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;  /* Firefox */
+    max-width: 100%;
+}
+/* 自定义滚动条样式 */
+.table-responsive::-webkit-scrollbar {
+    height: 6px;
+}
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+</style>
+
+<!-- 添加 Font Awesome 图标 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+<!-- 添加 Select2 样式和脚本 -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    $('#stockCodesSelect').select2({
+        placeholder: '选择股票代码',
+        allowClear: true,
+        width: '100%'
+    });
+});
+</script>
+{% endblock %} 

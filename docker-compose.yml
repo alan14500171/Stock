@@ -1,0 +1,39 @@
+version: "3"
+
+services:
+  web:
+    image: stock-app
+    build: .
+    container_name: stock-app
+    ports:
+      - "9009:9009"
+    volumes:
+      - .:/app
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      stock-network:
+        aliases:
+          - stock-app
+
+  webhook:
+    image: almir/webhook
+    container_name: stock-webhook
+    expose:
+      - "9000"
+    ports:
+      - "9000:9000"
+    volumes:
+      - /volume1/docker/stock-app:/volume1/docker/stock-app
+      - /volume1/docker/stock-app/hooks.json:/etc/webhook/hooks.json
+    command: -hooks /etc/webhook/hooks.json -verbose
+    restart: always
+    networks:
+      stock-network:
+        aliases:
+          - webhook-service
+
+networks:
+  stock-network:
+    driver: bridge
