@@ -3,12 +3,6 @@
     "id": "stock-deploy",
     "execute-command": "/volume1/docker/stock-app/deploy.sh",
     "command-working-directory": "/volume1/docker/stock-app",
-    "response-message": "Deploying stock app...",
-    "pass-arguments-to-command": [
-      {
-        "source": "string",
-        "name": "sudo"
-      }
-    ]
+    "response-message": "Deploying stock app using docker-compose..."
   }
 ]

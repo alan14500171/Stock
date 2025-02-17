@@ -1,0 +1,20 @@
+version: '3'
+services:
+  gogs:
+    image: gogs/gogs:latest
+    container_name: gogs
+    ports:
+      - "3000:3000"
+      - "22:22"
+    volumes:
+      - /volume1/docker/gogs/data:/data
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    restart: always
+    networks:
+      - gogs-network
+
+networks:
+  gogs-network:
+    driver: bridge 
