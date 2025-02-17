@@ -2,6 +2,7 @@ version: "3"
 
 services:
   web:
+    image: stock-app
     build: .
     container_name: stock-app
     ports:
@@ -24,7 +25,7 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - /volume1/docker/stock-app:/app
+      - /volume1/docker/stock-app:/volume1/docker/stock-app
       - /volume1/docker/stock-app/hooks.json:/etc/webhook/hooks.json
     command: -hooks /etc/webhook/hooks.json -verbose
     restart: always
