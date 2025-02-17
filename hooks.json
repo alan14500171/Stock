@@ -7,7 +7,7 @@
     "trigger-rule": {
       "match": {
         "type": "payload-hash-sha1",
-        "secret": "your-secret-key",
+        "secret": "3cbe95a425264f3096abaee38dab8ada",
         "parameter": {
           "source": "header",
           "name": "X-Gogs-Signature"
