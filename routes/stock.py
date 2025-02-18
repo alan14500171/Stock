@@ -12,6 +12,43 @@ from sqlalchemy import or_
 
 stock_bp = Blueprint('stock', __name__)
 
+def calculate_fifo_cost(buy_records, sell_quantity, sell_fees):
+    total_cost = 0
+    remaining_quantity = sell_quantity
+    used_records = []
+    
+    for record in buy_records:
+        if remaining_quantity <= 0:
+            break
+            
+        available_quantity = record['quantity']
+        unit_cost = record['price']
+        buy_fees = record['fees']
+        
+        used_quantity = min(remaining_quantity, available_quantity)
+        cost = (unit_cost * used_quantity) + (buy_fees * (used_quantity / available_quantity))
+        
+        used_records.append({
+            'quantity': used_quantity,
+            'price': unit_cost,
+            'fees': buy_fees * (used_quantity / available_quantity)
+        })
+        
+        total_cost += cost
+        remaining_quantity -= used_quantity
+    
+    # 计算卖出收入和利润
+    sell_amount = sell_quantity * record['price']
+    net_income = sell_amount - sell_fees
+    profit = net_income - total_cost
+    
+    return {
+        'total_cost': total_cost,
+        'profit': profit,
+        'profit_rate': (profit / total_cost * 100) if total_cost > 0 else 0,
+        'details': used_records
+    }
+
 def calculate_stats(transactions):
     """计算交易统计数据
     使用FIFO方法计算卖出交易的盈亏
@@ -188,8 +225,6 @@ def calculate_stats(transactions):
                 cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
                 total_cost += cost  # 累加总成本
                 
-                print(f"DEBUG: Processing buy record - quantity: {used_quantity}, unit_cost: {unit_cost}, fees: {buy_fees}, total_cost: {cost}")
-                
                 # 记录FIFO成本明细
                 fifo_cost_details.append({
                     'date': buy_record['date'],
@@ -211,8 +246,6 @@ def calculate_stats(transactions):
             sell_fees = trans.total_fees
             net_income = sell_amount - sell_fees
             profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
-            
-            print(f"DEBUG: Sell calculation - amount: {sell_amount}, fees: {sell_fees}, net_income: {net_income}, total_cost: {total_cost}, profit: {profit}")
             
             # 计算利润率
             profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
@@ -270,16 +303,9 @@ def calculate_stats(transactions):
                     total_cost += buy_record['price'] * buy_record['quantity']
                     total_fees += buy_record['fees']
                 
-                print(f"DEBUG: 持仓成本计算 - 代码: {code}")
-                print(f"DEBUG: 当前持仓: {stock['current_quantity']} 股")
-                print(f"DEBUG: 买入成本: {total_cost}")
-                print(f"DEBUG: 买入费用: {total_fees}")
-                
                 # 计算未实现盈亏(原始币种)
                 current_position_cost = total_cost + total_fees
                 unrealized_profit = market_value - current_position_cost
-                
-                print(f"DEBUG: 未实现盈亏计算 - 市值: {market_value}, 持仓成本: {current_position_cost}, 未实现盈亏: {unrealized_profit}")
                 
                 # 总盈亏(原始币种) = 已实现盈亏 + 未实现盈亏
                 stock['total_profit'] = stock['realized_profit'] + unrealized_profit
@@ -1478,8 +1504,6 @@ def process_transaction(stock, market_stats, trans, market):
                 cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
                 total_cost += cost  # 累加总成本
                 
-                print(f"DEBUG: Processing buy record - quantity: {used_quantity}, unit_cost: {unit_cost}, fees: {buy_fees}, total_cost: {cost}")
-                
                 # 记录FIFO成本明细
                 fifo_cost_details.append({
                     'date': buy_record['date'],
@@ -1501,8 +1525,6 @@ def process_transaction(stock, market_stats, trans, market):
             sell_fees = trans.total_fees
             net_income = sell_amount - sell_fees
             profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
-            
-            print(f"DEBUG: Sell calculation - amount: {sell_amount}, fees: {sell_fees}, net_income: {net_income}, total_cost: {total_cost}, profit: {profit}")
             
             # 计算利润率
             profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
