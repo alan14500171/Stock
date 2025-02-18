@@ -69,7 +69,7 @@ def calculate_stats(transactions):
         }
     
     # 按时间顺序处理交易
-    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at)):
+    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.transaction_code)):
         market = trans.market
         code = trans.stock_code
         
@@ -108,7 +108,7 @@ def calculate_stats(transactions):
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity
+            stock['total_buy_quantity'] += trans.total_quantity  # 累加总买入数量
             
             # 更新买入总额(原始币种)
             stock['total_buy'] += trans.total_amount
@@ -262,10 +262,24 @@ def calculate_stats(transactions):
                 stock['market_value'] = market_value
                 market_stats[stock['market']]['market_value'] += market_value
                 
+                # 计算当前持仓的买入费用分摊
+                # 使用FIFO队列中剩余的记录计算总成本和费用
+                total_cost = 0
+                total_fees = 0
+                for buy_record in stock['fifo_queue']:
+                    total_cost += buy_record['price'] * buy_record['quantity']
+                    total_fees += buy_record['fees']
+                
+                print(f"DEBUG: 持仓成本计算 - 代码: {code}")
+                print(f"DEBUG: 当前持仓: {stock['current_quantity']} 股")
+                print(f"DEBUG: 买入成本: {total_cost}")
+                print(f"DEBUG: 买入费用: {total_fees}")
+                
                 # 计算未实现盈亏(原始币种)
-                remaining_buy_fees = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
-                current_position_cost = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees
+                current_position_cost = total_cost + total_fees
                 unrealized_profit = market_value - current_position_cost
+                
+                print(f"DEBUG: 未实现盈亏计算 - 市值: {market_value}, 持仓成本: {current_position_cost}, 未实现盈亏: {unrealized_profit}")
                 
                 # 总盈亏(原始币种) = 已实现盈亏 + 未实现盈亏
                 stock['total_profit'] = stock['realized_profit'] + unrealized_profit
@@ -289,12 +303,25 @@ def calculate_stats(transactions):
                 # 计算盈亏率
                 if stock['total_buy'] > 0:
                     stock['profit_rate'] = (stock['total_profit'] / stock['total_buy']) * 100
+            else:
+                # 已清仓股票：总盈亏等于已实现盈亏
+                stock['total_profit'] = stock['realized_profit']
+                stock['total_profit_hkd'] = stock['realized_profit_hkd']
+                
+                # 盈亏率 = 已实现盈亏 / 总买入金额
+                if stock['total_buy'] > 0:
+                    stock['profit_rate'] = (stock['realized_profit'] / stock['total_buy']) * 100
+                
+                # 已清仓股票的市值为0
+                stock['market_value'] = 0
+                stock['market_value_hkd'] = 0
+                stock['current_price'] = 0
         else:
             # 已清仓股票：总盈亏等于已实现盈亏
             stock['total_profit'] = stock['realized_profit']
             stock['total_profit_hkd'] = stock['realized_profit_hkd']
             
-            # 盈亏率 = 已实现盈亏 / 总买入金额（不包含费用）
+            # 盈亏率 = 已实现盈亏 / 总买入金额
             if stock['total_buy'] > 0:
                 stock['profit_rate'] = (stock['realized_profit'] / stock['total_buy']) * 100
             
@@ -345,10 +372,10 @@ def calculate_stats(transactions):
     # 合并排序后的结果
     sorted_stock_stats = {**sorted_holding_stocks, **sorted_closed_stocks}
     
-    # 对每个股票的交易记录按日期和创建时间排序
+    # 对每个股票的交易记录按日期和交易编号排序
     for code in sorted_stock_stats:
         sorted_stock_stats[code]['transactions'].sort(
-            key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)),
+            key=lambda x: (x['transaction_date'], x['transaction_code']),
             reverse=True
         )
     
@@ -569,6 +596,8 @@ def list():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     stock_codes = request.args.getlist('stock_codes')
+    page = request.args.get('page', 1, type=int)
+    per_page = 15
     
     query = StockTransaction.query.filter_by(user_id=session['user_id'])
     
@@ -579,7 +608,14 @@ def list():
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
-    transactions = query.order_by(StockTransaction.created_at.desc()).all()
+    # 添加分页
+    pagination = query.order_by(StockTransaction.transaction_date.desc(), 
+                              StockTransaction.created_at.desc()).paginate(
+        page=page, 
+        per_page=per_page,
+        error_out=False
+    )
+    transactions = pagination.items
     
     # 获取所有股票代码供查询使用
     all_stock_codes = db.session.query(StockTransaction.stock_code)\
@@ -596,6 +632,7 @@ def list():
     
     return render_template('stock/list.html', 
                          transactions=transactions,
+                         pagination=pagination,
                          all_stock_codes=all_stock_codes,
                          selected_stock_codes=stock_codes,
                          stock_names=stock_names)
@@ -1361,7 +1398,7 @@ def process_transaction(stock, market_stats, trans, market):
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity
+            stock['total_buy_quantity'] += trans.total_quantity  # 累加总买入数量
             
             # 更新买入总额(原始币种)
             stock['total_buy'] += trans.total_amount

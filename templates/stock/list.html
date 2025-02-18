@@ -62,9 +62,7 @@
                         <th>交易编号</th>
                         <th>买卖</th>
                         <th>成交明细</th>
-                        <th>汇率</th>
                         <th class="text-end">总金额</th>
-                        <th class="text-end">港币总金额</th>
                         <th class="text-end">经纪佣金</th>
                         <th class="text-end">交易征费</th>
                         <th class="text-end">印花税</th>
@@ -72,7 +70,6 @@
                         <th class="text-end">存入证券费</th>
                         <th class="text-end">手续费</th>
                         <th class="text-end">净金额</th>
-                        <th class="text-end">港币净金额</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -81,9 +78,10 @@
                     <tr>
                         <td>{{ transaction.transaction_date.strftime('%Y-%m-%d') }}</td>
                         <td>{{ transaction.market }}</td>
-                        <td>{{ transaction.stock_code }}
+                        <td>
+                            <div>{{ transaction.stock_code }}</div>
                             {% if stock_names.get(transaction.stock_code) %}
-                            <small class="text-muted ms-1">{{ stock_names[transaction.stock_code] }}</small>
+                            <div><small class="text-muted">{{ stock_names[transaction.stock_code] }}</small></div>
                             {% endif %}
                         </td>
                         <td>{{ transaction.transaction_code }}</td>
@@ -99,17 +97,30 @@
                             <div>{{ detail.quantity }}股 @ {{ "%.3f"|format(detail.price) }}</div>
                             {% endfor %}
                         </td>
-                        <td>{{ "%.3f"|format(transaction.exchange_rate) if transaction.exchange_rate else '-' }}</td>
-                        <td class="text-end">{{ "%.2f"|format(transaction.total_amount) }}</td>
-                        <td class="text-end">{{ "%.2f"|format(transaction.total_amount_hkd) }}</td>
+                        <td class="text-end">
+                            {{ "%.2f"|format(transaction.total_amount) }}
+                            {% if transaction.market != 'HK' %}
+                            <br>
+                            <small class="text-muted">
+                                {{ "%.3f"|format(transaction.exchange_rate) }}@{{ "%.2f"|format(transaction.total_amount_hkd) }}
+                            </small>
+                            {% endif %}
+                        </td>
                         <td class="text-end">{{ "%.2f"|format(transaction.broker_fee) }}</td>
                         <td class="text-end">{{ "%.2f"|format(transaction.transaction_levy) }}</td>
                         <td class="text-end">{{ "%.2f"|format(transaction.stamp_duty) }}</td>
                         <td class="text-end">{{ "%.2f"|format(transaction.trading_fee) }}</td>
                         <td class="text-end">{{ "%.2f"|format(transaction.deposit_fee) }}</td>
                         <td class="text-end">{{ "%.2f"|format(transaction.total_fees) }}</td>
-                        <td class="text-end">{{ "%.2f"|format(transaction.net_amount) }}</td>
-                        <td class="text-end">{{ "%.2f"|format(transaction.net_amount_hkd) }}</td>
+                        <td class="text-end">
+                            {{ "%.2f"|format(transaction.net_amount) }}
+                            {% if transaction.market != 'HK' %}
+                            <br>
+                            <small class="text-muted">
+                                {{ "%.3f"|format(transaction.exchange_rate) }}@{{ "%.2f"|format(transaction.net_amount_hkd) }}
+                            </small>
+                            {% endif %}
+                        </td>
                         <td>
                             <div class="btn-group btn-group-sm">
                                 <a href="{{ url_for('stock.edit', id=transaction.id) }}" class="btn btn-outline-primary btn-sm">
@@ -126,6 +137,44 @@
                 </tbody>
             </table>
         </div>
+        
+        <!-- 分页导航 -->
+        {% if pagination.pages > 1 %}
+        <div class="card-footer d-flex justify-content-center">
+            <nav aria-label="Page navigation">
+                <ul class="pagination pagination-sm mb-0">
+                    <!-- 上一页 -->
+                    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('stock.list', page=pagination.prev_num, start_date=request.args.get('start_date'), end_date=request.args.get('end_date'), stock_codes=request.args.getlist('stock_codes')) if pagination.has_prev else '#' }}">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    </li>
+                    
+                    <!-- 页码 -->
+                    {% for page in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page %}
+                            <li class="page-item {% if page == pagination.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('stock.list', page=page, start_date=request.args.get('start_date'), end_date=request.args.get('end_date'), stock_codes=request.args.getlist('stock_codes')) }}">
+                                    {{ page }}
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <!-- 下一页 -->
+                    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('stock.list', page=pagination.next_num, start_date=request.args.get('start_date'), end_date=request.args.get('end_date'), stock_codes=request.args.getlist('stock_codes')) if pagination.has_next else '#' }}">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
         {% else %}
         <div class="text-center py-4">
             <p class="text-muted">暂无交易记录</p>
