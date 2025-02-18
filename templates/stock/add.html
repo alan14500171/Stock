@@ -217,18 +217,33 @@
     background-color: #dee2e6;
 }
 
-/* 添加选中股票信息的样式 */
+/* 选中的股票信息样式 */
 .selected-stock-info {
     position: absolute;
     right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding-right: 25px;
+    font-size: 0.9em;
 }
 
-.selected-stock-name {
-    margin-left: 8px;
+.selected-stock-info .stock-market {
+    background-color: #dc3545;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+}
+
+.selected-stock-info .selected-stock-code {
+    font-weight: bold;
+    color: #212529;
+}
+
+.selected-stock-info .selected-stock-name {
     color: #6c757d;
 }
 </style>

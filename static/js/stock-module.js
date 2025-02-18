@@ -248,263 +248,174 @@ class StockCodeControl {
     static clearControl(input) {
         // 清除输入值
         input.value = '';
-        
-        // 清除建议列表
-        const container = input.closest('.position-relative');
-        const suggestions = container.querySelector('#stock_suggestions');
-        if (suggestions) {
-            suggestions.innerHTML = '';
-        }
-        
-        // 清除选中的股票信息
-        const selectedInfo = container.querySelector('.selected-stock-info');
-        if (selectedInfo) {
-            selectedInfo.remove();
-        }
-        
-        // 重置市场选择
+        // 清除市场值
         const marketInput = document.getElementById('market');
         if (marketInput) {
             marketInput.value = 'HK';
         }
+        // 清除选中的股票信息
+        const selectedInfo = input.parentElement.querySelector('.selected-stock-info');
+        if (selectedInfo) {
+            selectedInfo.remove();
+        }
     }
 
     static bindStockCodeEvents(input) {
-        // 创建必要的DOM元素
-        this.createUIElements(input);
+        let currentSuggestions = [];
+        let currentIndex = -1;
+        let suggestionsDiv = null;
 
-        let searchTimeout;
-        let currentSuggestionIndex = -1;
-        const suggestionsContainer = input.parentElement.querySelector('.stock-suggestions');
-        const searchSpinner = input.parentElement.querySelector('.search-spinner');
+        // 创建建议列表容器
+        const createSuggestionsDiv = () => {
+            if (!suggestionsDiv) {
+                suggestionsDiv = document.createElement('div');
+                suggestionsDiv.id = 'stock_suggestions';
+                suggestionsDiv.style.position = 'absolute';
+                suggestionsDiv.style.width = '100%';
+                suggestionsDiv.style.zIndex = '1000';
+                suggestionsDiv.style.maxHeight = '200px';
+                suggestionsDiv.style.overflowY = 'auto';
+                input.parentElement.appendChild(suggestionsDiv);
+            }
+            return suggestionsDiv;
+        };
+
+        // 清除建议列表
+        const clearSuggestions = () => {
+            if (suggestionsDiv) {
+                suggestionsDiv.innerHTML = '';
+                suggestionsDiv.style.display = 'none';
+            }
+            currentIndex = -1;
+            currentSuggestions = [];
+        };
 
         // 处理输入事件
-        input.addEventListener('input', (e) => {
+        let searchTimeout;
+        input.addEventListener('input', async (e) => {
             clearTimeout(searchTimeout);
-            currentSuggestionIndex = -1;
-            const code = e.target.value.trim();
+            const keyword = e.target.value.trim();
             
-            if (!code) {
-                suggestionsContainer.classList.add('d-none');
+            if (keyword.length === 0) {
+                this.clearControl(input);
+                clearSuggestions();
                 return;
             }
-            
-            // 显示加载状态
-            searchSpinner.classList.remove('d-none');
-            
+
             searchTimeout = setTimeout(async () => {
                 try {
-                    // 从数据库中搜索股票
-                    const response = await fetch(`/api/stock/search?keyword=${code}`);
+                    const response = await fetch(`/api/stock/search?keyword=${encodeURIComponent(keyword)}`);
                     const result = await response.json();
-                    
+
                     if (result.success && result.data.length > 0) {
-                        // 显示建议列表
-                        suggestionsContainer.innerHTML = result.data.map(stock => `
-                            <div class="suggestion-item" data-code="${stock.code}" data-market="${stock.market}" data-name="${stock.name}">
+                        currentSuggestions = result.data;
+                        const suggestions = createSuggestionsDiv();
+                        suggestions.innerHTML = '';
+                        suggestions.style.display = 'block';
+
+                        result.data.forEach((stock, index) => {
+                            const div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            div.innerHTML = `
                                 <div>
                                     <span class="stock-code">${stock.code}</span>
-                                    <span class="stock-name">${stock.name}</span>
+                                    <span class="stock-name">${stock.name || ''}</span>
                                 </div>
                                 <span class="stock-market">${stock.market}</span>
-                            </div>
-                        `).join('');
-                        
-                        suggestionsContainer.classList.remove('d-none');
-                        
-                        // 绑定建议项点击事件
-                        suggestionsContainer.querySelectorAll('.suggestion-item').forEach(item => {
-                            item.addEventListener('click', () => this.selectSuggestion(item, input));
+                            `;
+                            div.addEventListener('click', () => {
+                                this.selectSuggestion(stock, input);
+                                clearSuggestions();
+                            });
+                            suggestions.appendChild(div);
                         });
                     } else {
-                        suggestionsContainer.classList.add('d-none');
+                        clearSuggestions();
                     }
                 } catch (error) {
-                    console.error('搜索股票失败:', error);
-                    suggestionsContainer.classList.add('d-none');
-                } finally {
-                    searchSpinner.classList.add('d-none');
+                    console.error('搜索股票时出错:', error);
+                    clearSuggestions();
                 }
             }, 300);
         });
 
-        // 键盘导航处理
+        // 处理键盘事件
         input.addEventListener('keydown', (e) => {
-            const suggestions = suggestionsContainer.querySelectorAll('.suggestion-item');
-            
-            if (suggestions.length === 0 || suggestionsContainer.classList.contains('d-none')) {
+            if (!suggestionsDiv || suggestionsDiv.style.display === 'none') {
                 return;
             }
-            
+
             switch (e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
-                    currentSuggestionIndex = Math.min(currentSuggestionIndex + 1, suggestions.length - 1);
-                    this.updateSuggestionHighlight(suggestions, currentSuggestionIndex);
+                    currentIndex = Math.min(currentIndex + 1, currentSuggestions.length - 1);
+                    this.updateSuggestionHighlight(suggestionsDiv, currentIndex);
                     break;
-                    
                 case 'ArrowUp':
                     e.preventDefault();
-                    currentSuggestionIndex = Math.max(currentSuggestionIndex - 1, 0);
-                    this.updateSuggestionHighlight(suggestions, currentSuggestionIndex);
+                    currentIndex = Math.max(currentIndex - 1, -1);
+                    this.updateSuggestionHighlight(suggestionsDiv, currentIndex);
                     break;
-                    
                 case 'Enter':
                     e.preventDefault();
-                    if (currentSuggestionIndex >= 0 && currentSuggestionIndex < suggestions.length) {
-                        this.selectSuggestion(suggestions[currentSuggestionIndex], input);
+                    if (currentIndex >= 0 && currentIndex < currentSuggestions.length) {
+                        this.selectSuggestion(currentSuggestions[currentIndex], input);
+                        clearSuggestions();
                     }
                     break;
-                    
                 case 'Escape':
-                    e.preventDefault();
-                    suggestionsContainer.classList.add('d-none');
-                    currentSuggestionIndex = -1;
+                    clearSuggestions();
                     break;
             }
         });
 
         // 处理失焦事件
-        input.addEventListener('blur', async () => {
-            const code = input.value.trim();
-            if (!code) return;
-
-            const marketInput = input.closest('form').querySelector('input[name="market"]');
-            const market = marketInput ? marketInput.value : 'HK';
-            
-            try {
-                // 先从数据库中查询股票是否存在
-                const searchResponse = await fetch(`/api/stock/search?keyword=${code}`);
-                const searchResult = await searchResponse.json();
-                
-                if (!searchResult.success || searchResult.data.length === 0) {
-                    console.log('股票不存在，打开添加模态框');
-                    // 确保StockModule已经初始化
-                    if (!window.StockModule) {
-                        console.error('StockModule not found');
-                        return;
-                    }
-                    
-                    // 打开添加模态框，并在模态框中查询股票信息
-                    window.StockModule.open(market, code, (newStock) => {
-                        if (newStock) {
-                            console.log('股票添加成功，更新输入框', newStock);
-                            // 更新输入框的值
-                            input.value = newStock.code;
-                            
-                            // 更新市场选择框
-                            if (marketInput) {
-                                marketInput.value = newStock.market;
-                            }
-
-                            // 更新选中的股票信息
-                            const stockInfoDiv = input.parentElement.querySelector('.selected-stock-info');
-                            if (stockInfoDiv) {
-                                stockInfoDiv.classList.remove('d-none');
-                                stockInfoDiv.querySelector('.selected-stock-code').textContent = newStock.code;
-                                stockInfoDiv.querySelector('.selected-stock-name').textContent = newStock.name;
-                            }
-
-                            // 将焦点移动到下一个输入框
-                            const nextInput = input.closest('form').querySelector('#transaction_code');
-                            if (nextInput) {
-                                nextInput.focus();
-                            }
-                        }
-                    });
-                } else {
-                    // 股票已存在，显示股票信息
-                    const stock = searchResult.data[0];
-                    const stockInfoDiv = input.parentElement.querySelector('.selected-stock-info');
-                    if (stockInfoDiv) {
-                        stockInfoDiv.classList.remove('d-none');
-                        stockInfoDiv.querySelector('.selected-stock-code').textContent = stock.code;
-                        stockInfoDiv.querySelector('.selected-stock-name').textContent = stock.name;
-                    }
-                }
-            } catch (error) {
-                console.error('查询股票信息失败:', error);
-            }
-        });
-
-        // 点击其他地方时隐藏建议列表
         document.addEventListener('click', (e) => {
-            if (!input.contains(e.target) && !suggestionsContainer.contains(e.target)) {
-                suggestionsContainer.classList.add('d-none');
-                currentSuggestionIndex = -1;
+            if (!input.contains(e.target) && !suggestionsDiv?.contains(e.target)) {
+                clearSuggestions();
             }
         });
     }
 
     static createUIElements(input) {
-        const container = input.parentElement;
-        
-        // 创建建议列表容器
-        if (!container.querySelector('.stock-suggestions')) {
-            const suggestionsDiv = document.createElement('div');
-            suggestionsDiv.className = 'stock-suggestions position-absolute w-100 mt-1 d-none';
-            suggestionsDiv.style.cssText = 'z-index: 1000; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ced4da; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
-            container.appendChild(suggestionsDiv);
-        }
-        
-        // 创建加载动画
-        if (!container.querySelector('.search-spinner')) {
-            const spinnerDiv = document.createElement('div');
-            spinnerDiv.className = 'search-spinner spinner-border spinner-border-sm text-primary position-absolute d-none';
-            spinnerDiv.style.cssText = 'right: 10px; top: 10px;';
-            spinnerDiv.innerHTML = '<span class="visually-hidden">搜索中...</span>';
-            container.appendChild(spinnerDiv);
-        }
-        
         // 创建选中股票信息显示区域
-        if (!container.querySelector('.selected-stock-info')) {
-            const stockInfoDiv = document.createElement('div');
-            stockInfoDiv.className = 'selected-stock-info position-absolute d-none';
-            stockInfoDiv.style.cssText = 'right: 10px; top: 50%; transform: translateY(-50%); font-size: 0.9em; padding-right: 25px;';
-            stockInfoDiv.innerHTML = `
-                <span class="selected-stock-code"></span>
-                <span class="selected-stock-name text-muted" style="margin-left: 8px;"></span>
-            `;
-            container.appendChild(stockInfoDiv);
-        }
+        const selectedInfo = document.createElement('div');
+        selectedInfo.className = 'selected-stock-info d-none';
+        input.parentElement.appendChild(selectedInfo);
     }
 
     static updateSuggestionHighlight(suggestions, currentIndex) {
-        suggestions.forEach((item, index) => {
-            if (index === currentIndex) {
-                item.classList.add('active');
-            } else {
-                item.classList.remove('active');
-            }
+        const items = suggestions.querySelectorAll('.suggestion-item');
+        items.forEach((item, index) => {
+            item.classList.toggle('active', index === currentIndex);
         });
     }
 
-    static selectSuggestion(item, input) {
-        const selectedCode = item.dataset.code;
-        const selectedMarket = item.dataset.market;
-        const selectedName = item.dataset.name;
+    static selectSuggestion(stock, input) {
+        // 设置股票代码
+        input.value = stock.code;
         
-        // 设置选中的值
-        input.value = selectedCode;
-        const marketInput = input.closest('form').querySelector('input[name="market"]');
+        // 设置市场
+        const marketInput = document.getElementById('market');
         if (marketInput) {
-            marketInput.value = selectedMarket;
+            marketInput.value = stock.market;
         }
         
-        // 显示选中的股票信息
-        const stockInfo = input.parentElement.querySelector('.selected-stock-info');
-        if (stockInfo) {
-            stockInfo.classList.remove('d-none');
-            stockInfo.querySelector('.selected-stock-code').textContent = selectedCode;
-            stockInfo.querySelector('.selected-stock-name').textContent = selectedName;
+        // 更新选中的股票信息显示
+        let selectedInfo = input.parentElement.querySelector('.selected-stock-info');
+        if (!selectedInfo) {
+            selectedInfo = document.createElement('div');
+            selectedInfo.className = 'selected-stock-info';
+            input.parentElement.appendChild(selectedInfo);
         }
         
-        // 隐藏建议列表
-        const suggestionsContainer = input.parentElement.querySelector('.stock-suggestions');
-        if (suggestionsContainer) {
-            suggestionsContainer.classList.add('d-none');
-        }
-        
+        selectedInfo.innerHTML = `
+            <span class="stock-market">${stock.market}</span>
+            <span class="selected-stock-code">${stock.code}</span>
+            <span class="selected-stock-name">${stock.name || ''}</span>
+        `;
+        selectedInfo.classList.remove('d-none');
+
         // 将焦点移动到下一个输入框
         const nextInput = input.closest('form').querySelector('#transaction_code');
         if (nextInput) {
