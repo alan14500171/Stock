@@ -847,7 +847,7 @@ def exchange_rate_list():
     """汇率列表页面"""
     # 获取查询参数
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
     
