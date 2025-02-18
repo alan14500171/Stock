@@ -1,0 +1,106 @@
+/* 下拉菜单样式 */
+.dropdown-menu {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 8px;
+    width: 100%;
+}
+
+.dropdown-toggle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    padding-right: 25px;
+}
+
+.dropdown-toggle::after {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.dropdown-item {
+    padding: 8px 12px;
+    margin: 2px 0;
+    border-radius: 4px;
+    white-space: normal;
+    word-break: break-all;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa;
+}
+
+.dropdown-item input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.dropdown-item.active {
+    background-color: #e9ecef;
+    color: #000;
+}
+
+/* 搜索框样式 */
+.search-box {
+    position: sticky;
+    top: 0;
+    background-color: white;
+    z-index: 1;
+    padding: 5px;
+}
+
+.search-box .form-control {
+    border-radius: 4px;
+}
+
+/* 分隔线样式 */
+hr {
+    margin: 0.5rem 0;
+    opacity: 0.1;
+}
+
+/* 选中项展示区样式 */
+#selectedStocksContainer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+#selectedStocksContainer .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.65rem;
+    font-weight: normal;
+    background-color: #e9ecef;
+    color: #212529;
+    border: 1px solid #ced4da;
+}
+
+#selectedStocksContainer .btn-close {
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    opacity: 0.5;
+}
+
+#selectedStocksContainer .btn-close:hover {
+    opacity: 1;
+}
+
+/* 空状态提示样式 */
+.dropdown-menu .text-muted {
+    font-size: 0.875rem;
+    color: #6c757d;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+}
+
+.dropdown-menu .text-muted i {
+    font-size: 1rem;
+    vertical-align: -2px;
+} 

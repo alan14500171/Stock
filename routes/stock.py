@@ -621,6 +621,7 @@ def get_stock_codes():
 def list():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    market = request.args.get('market')
     stock_codes = request.args.getlist('stock_codes')
     page = request.args.get('page', 1, type=int)
     per_page = 15
@@ -631,6 +632,8 @@ def list():
         query = query.filter(StockTransaction.transaction_date >= start_date)
     if end_date:
         query = query.filter(StockTransaction.transaction_date <= end_date)
+    if market:
+        query = query.filter(StockTransaction.market == market)
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
@@ -644,22 +647,42 @@ def list():
     transactions = pagination.items
     
     # 获取所有股票代码供查询使用
-    all_stock_codes = db.session.query(StockTransaction.stock_code)\
-        .filter_by(user_id=session['user_id'])\
-        .distinct()\
-        .order_by(StockTransaction.stock_code)\
-        .all()
-    all_stock_codes = [code[0] for code in all_stock_codes]
+    stock_codes_query = db.session.query(StockTransaction.stock_code, StockTransaction.market)\
+        .filter_by(user_id=session['user_id'])
     
-    # 获取股票名称
-    stock_codes = set(t.stock_code for t in transactions)
+    if market:
+        stock_codes_query = stock_codes_query.filter(StockTransaction.market == market)
+    
+    all_stock_codes = stock_codes_query.distinct().order_by(StockTransaction.stock_code).all()
+    
+    # 获取所有股票的完整信息
+    all_stocks = []
+    for code, market in all_stock_codes:
+        stock = Stock.query.filter_by(code=code, market=market).first()
+        if stock:
+            all_stocks.append({
+                'code': stock.code,
+                'market': stock.market,
+                'name': stock.name
+            })
+        else:
+            all_stocks.append({
+                'code': code,
+                'market': market,
+                'name': ''
+            })
+    
+    # 获取当前页面显示的股票名称
+    stock_codes = [t.stock_code for t in transactions]
+    stock_codes = sorted(set(stock_codes))
     stocks = Stock.query.filter(Stock.code.in_(stock_codes)).all()
     stock_names = {s.code: s.name for s in stocks}
     
     return render_template('stock/list.html', 
                          transactions=transactions,
                          pagination=pagination,
-                         all_stock_codes=all_stock_codes,
+                         all_stocks=all_stocks,
+                         all_stock_codes=[s['code'] for s in all_stocks],
                          selected_stock_codes=stock_codes,
                          stock_names=stock_names)
 
@@ -1004,6 +1027,7 @@ def stats():
     # 获取查询参数，但不设置默认值，允许为空
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    market = request.args.get('market')
     stock_codes = request.args.getlist('stock_codes')
     
     # 强制从数据库读取最新数据
@@ -1018,6 +1042,8 @@ def stats():
         query = query.filter(StockTransaction.transaction_date >= start_date)
     if end_date:
         query = query.filter(StockTransaction.transaction_date <= end_date)
+    if market:
+        query = query.filter(StockTransaction.market == market)
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
@@ -1025,12 +1051,30 @@ def stats():
     transactions = query.with_for_update().all()
     
     # 获取所有股票代码供查询使用，同样强制重新查询
-    all_stock_codes = db.session.query(StockTransaction.stock_code)\
-        .filter_by(user_id=session['user_id'])\
-        .distinct()\
-        .with_for_update()\
-        .all()
-    all_stock_codes = [code[0] for code in all_stock_codes]
+    stock_codes_query = db.session.query(StockTransaction.stock_code, StockTransaction.market)\
+        .filter_by(user_id=session['user_id'])
+    
+    if market:
+        stock_codes_query = stock_codes_query.filter(StockTransaction.market == market)
+    
+    stock_codes_query = stock_codes_query.distinct().with_for_update().all()
+    
+    # 获取完整的股票信息
+    all_stocks = []
+    for code, market in stock_codes_query:
+        stock = Stock.query.filter_by(code=code, market=market).first()
+        if stock:
+            all_stocks.append({
+                'code': stock.code,
+                'market': stock.market,
+                'name': stock.name
+            })
+        else:
+            all_stocks.append({
+                'code': code,
+                'market': market,
+                'name': ''
+            })
     
     # 计算统计数据
     market_stats, stock_stats = calculate_stats(transactions)
@@ -1039,7 +1083,7 @@ def stats():
     template = render_template('stock/stats.html',
                              market_stats=market_stats,
                              stock_stats=stock_stats,
-                             all_stock_codes=all_stock_codes,
+                             all_stocks=all_stocks,
                              selected_stock_codes=stock_codes)
     
     # 设置响应内容
@@ -1050,30 +1094,44 @@ def stats():
 @login_required
 def stocks():
     # 获取查询参数
-    market = request.args.get('market', '')
-    keyword = request.args.get('keyword', '')
     page = request.args.get('page', 1, type=int)
-    per_page = 15  # 每页显示15条记录
+    per_page = request.args.get('per_page', 50, type=int)
+    market = request.args.get('market', '')
+    search = request.args.get('search', '')
+    selected_stock_codes = request.args.getlist('stock_codes')
 
     # 构建查询
     query = Stock.query
     if market:
-        query = query.filter(Stock.market == market)
-    if keyword:
-        query = query.filter(or_(
-            Stock.code.ilike(f'%{keyword}%'),
-            Stock.name.ilike(f'%{keyword}%')
-        ))
+        query = query.filter_by(market=market)
+    if search:
+        query = query.filter(
+            or_(
+                Stock.code.ilike(f'%{search}%'),
+                Stock.name.ilike(f'%{search}%')
+            )
+        )
 
-    # 应用分页
+    # 获取分页数据
     pagination = query.order_by(Stock.market.asc(), Stock.code.asc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
 
-    return render_template('stock/stocks.html', 
-                         pagination=pagination,
-                         market=market,
-                         keyword=keyword)
+    # 获取所有股票用于选择器
+    all_stocks = [
+        {
+            'code': stock.code,
+            'market': stock.market,
+            'name': stock.name
+        }
+        for stock in Stock.query.order_by(Stock.market.asc(), Stock.code.asc()).all()
+    ]
+
+    return render_template('stock/stocks.html',
+                          pagination=pagination,
+                          market=market,
+                          all_stocks=all_stocks,
+                          selected_stock_codes=selected_stock_codes)
 
 @stock_bp.route('/stocks/add', methods=['POST'])
 @login_required
