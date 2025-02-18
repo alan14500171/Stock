@@ -44,7 +44,9 @@ def calculate_stats(transactions):
     def init_stock_stats():
         return {
             'market': '',              # 市场
+            'name': '',               # 添加公司名称字段
             'current_quantity': 0,     # 当前持仓数量
+            'total_buy_quantity': 0,   # 总买入数量
             'transaction_count': 0,    # 交易笔数
             'total_buy': 0,           # 买入总额(HKD)
             'total_buy_usd': 0,       # 买入总额(USD，仅USA市场)
@@ -68,7 +70,7 @@ def calculate_stats(transactions):
         }
     
     # 按时间顺序处理交易
-    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at)):
+    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at), reverse=True):
         market = trans.market
         code = trans.stock_code
         
@@ -80,6 +82,10 @@ def calculate_stats(transactions):
         if code not in stock_stats:
             stock_stats[code] = init_stock_stats()
             stock_stats[code]['market'] = market
+            # 获取并设置公司名称
+            stock = Stock.query.filter_by(code=code, market=market).first()
+            if stock:
+                stock_stats[code]['name'] = stock.name
         
         stock = stock_stats[code]
         
@@ -99,6 +105,7 @@ def calculate_stats(transactions):
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
+            stock['total_buy_quantity'] += trans.total_quantity  # 更新总买入数量
             
             if market == 'USA':
                 stock['total_buy_usd'] += trans.total_amount
@@ -260,45 +267,114 @@ def calculate_stats(transactions):
                         market_stats[stock['market']]['market_value'] += market_value_hkd
                         
                         # 计算未实现盈亏（美元）
-                        unrealized_profit_usd = market_value_usd - (stock['avg_cost_usd'] * stock['current_quantity'])
+                        # 当前持仓成本 = 平均成本 * 数量 + 剩余持仓对应的买入费用
+                        remaining_buy_fees_usd = stock['total_fees_usd'] * (stock['current_quantity'] / stock['total_buy_quantity'])
+                        current_position_cost_usd = (stock['avg_cost_usd'] * stock['current_quantity']) + remaining_buy_fees_usd
+                        unrealized_profit_usd = market_value_usd - current_position_cost_usd
+                        
+                        # 总盈亏 = 已实现盈亏 + 未实现盈亏
                         stock['total_profit_usd'] = stock['realized_profit_usd'] + unrealized_profit_usd
                         
                         # 计算未实现盈亏（港币）
-                        unrealized_profit_hkd = market_value_hkd - (stock['avg_cost'] * stock['current_quantity'])
+                        remaining_buy_fees_hkd = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
+                        current_position_cost_hkd = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees_hkd
+                        unrealized_profit_hkd = market_value_hkd - current_position_cost_hkd
+                        
+                        # 总盈亏（港币） = 已实现盈亏 + 未实现盈亏
                         stock['total_profit'] = stock['realized_profit'] + unrealized_profit_hkd
+                        
+                        # 计算盈亏率（使用美元）
+                        total_cost_with_fees_usd = current_position_cost_usd + stock['total_fees_usd'] * (stock['total_buy_quantity'] - stock['current_quantity']) / stock['total_buy_quantity']
+                        if total_cost_with_fees_usd > 0:
+                            stock['profit_rate'] = stock['total_profit_usd'] / total_cost_with_fees_usd * 100
                 else:
                     # 港股：直接用港币计算
                     market_value = stock['current_price'] * stock['current_quantity']
                     stock['market_value'] = market_value
                     market_stats[stock['market']]['market_value'] += market_value
                     
-                    # 计算未实现盈亏
-                    unrealized_profit = market_value - (stock['avg_cost'] * stock['current_quantity'])
+                    # 计算未实现盈亏，包含费用成本
+                    remaining_buy_fees = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
+                    current_position_cost = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees
+                    unrealized_profit = market_value - current_position_cost
+                    
+                    # 总盈亏 = 已实现盈亏 + 未实现盈亏
                     stock['total_profit'] = stock['realized_profit'] + unrealized_profit
-                
-                # 计算盈亏率
-                if stock['market'] == 'USA':
-                    total_investment_usd = stock['total_buy_usd']
-                    if total_investment_usd > 0:
-                        stock['profit_rate'] = stock['total_profit_usd'] / total_investment_usd * 100
-                else:
-                    total_investment = stock['total_buy']
-                    if total_investment > 0:
-                        stock['profit_rate'] = stock['total_profit'] / total_investment * 100
+                    
+                    # 计算盈亏率
+                    total_cost_with_fees = current_position_cost + stock['total_fees'] * (stock['total_buy_quantity'] - stock['current_quantity']) / stock['total_buy_quantity']
+                    if total_cost_with_fees > 0:
+                        stock['profit_rate'] = stock['total_profit'] / total_cost_with_fees * 100
     
     # 计算市场级别的总盈亏和盈亏率
     for market, stats in market_stats.items():
         if market == 'USA':
-            stats['total_profit_usd'] = stats['realized_profit_usd'] + stats['market_value_usd'] - stats['total_buy_usd']
-            stats['total_profit'] = stats['realized_profit'] + stats['market_value'] - stats['total_buy']
+            # 美股市场：美元计算
+            # 总盈亏 = 已实现盈亏 + 未实现盈亏
+            # 未实现盈亏 = 当前市值 - 当前持仓成本
+            # 当前持仓成本 = 总买入 - 已卖出部分的成本（等于已实现盈亏 + 卖出金额 - 卖出费用）
+            current_position_cost_usd = stats['total_buy_usd'] - (stats['realized_profit_usd'] + stats['total_sell_usd'] - stats['total_fees_usd'])
+            unrealized_profit_usd = stats['market_value_usd'] - current_position_cost_usd
+            stats['total_profit_usd'] = stats['realized_profit_usd'] + unrealized_profit_usd
+            
+            # 港币计算
+            current_position_cost_hkd = stats['total_buy'] - (stats['realized_profit'] + stats['total_sell'] - stats['total_fees'])
+            unrealized_profit_hkd = stats['market_value'] - current_position_cost_hkd
+            stats['total_profit'] = stats['realized_profit'] + unrealized_profit_hkd
+            
+            # 计算盈亏率（使用美元）
             if stats['total_buy_usd'] > 0:
                 stats['profit_rate'] = stats['total_profit_usd'] / stats['total_buy_usd'] * 100
         else:
-            stats['total_profit'] = stats['realized_profit'] + stats['market_value'] - stats['total_buy']
+            # 港股市场：港币计算
+            current_position_cost = stats['total_buy'] - (stats['realized_profit'] + stats['total_sell'] - stats['total_fees'])
+            unrealized_profit = stats['market_value'] - current_position_cost
+            stats['total_profit'] = stats['realized_profit'] + unrealized_profit
+            
+            # 计算盈亏率
             if stats['total_buy'] > 0:
                 stats['profit_rate'] = stats['total_profit'] / stats['total_buy'] * 100
     
-    return market_stats, stock_stats
+    # 将股票分为持仓和已清仓两组
+    holding_stocks = {}
+    closed_stocks = {}
+    
+    for code, stock in stock_stats.items():
+        if stock['current_quantity'] > 0:
+            holding_stocks[code] = stock
+        else:
+            closed_stocks[code] = stock
+    
+    # 分别对持仓和已清仓股票按最新交易日期和系统时间排序
+    def get_latest_transaction_info(transactions):
+        if not transactions:
+            return (datetime.min, datetime.min)
+        latest = max(transactions, key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)))
+        return (latest['transaction_date'], latest.get('created_at', datetime.min))
+    
+    sorted_holding_stocks = dict(sorted(
+        holding_stocks.items(),
+        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
+        reverse=True
+    ))
+    
+    sorted_closed_stocks = dict(sorted(
+        closed_stocks.items(),
+        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
+        reverse=True
+    ))
+    
+    # 合并排序后的结果
+    sorted_stock_stats = {**sorted_holding_stocks, **sorted_closed_stocks}
+    
+    # 对每个股票的交易记录按日期和创建时间排序
+    for code in sorted_stock_stats:
+        sorted_stock_stats[code]['transactions'].sort(
+            key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)),
+            reverse=True
+        )
+    
+    return market_stats, sorted_stock_stats
 
 def get_holding_stocks(user_id):
     """获取用户的持仓股票"""
@@ -908,17 +984,42 @@ def stats():
     # 计算统计数据
     market_stats, stock_stats = calculate_stats(transactions)
     
-    # 对股票统计数据按持股数量和买入总额降序排序
-    sorted_stock_stats = dict(sorted(
-        stock_stats.items(),
-        key=lambda x: (x[1]['current_quantity'], x[1]['total_buy']),
+    # 将股票分为持仓和已清仓两组
+    holding_stocks = {}
+    closed_stocks = {}
+    
+    for code, stock in stock_stats.items():
+        if stock['current_quantity'] > 0:
+            holding_stocks[code] = stock
+        else:
+            closed_stocks[code] = stock
+    
+    # 分别对持仓和已清仓股票按最新交易日期和系统时间排序
+    def get_latest_transaction_info(transactions):
+        if not transactions:
+            return (datetime.min, datetime.min)
+        latest = max(transactions, key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)))
+        return (latest['transaction_date'], latest.get('created_at', datetime.min))
+    
+    sorted_holding_stocks = dict(sorted(
+        holding_stocks.items(),
+        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
         reverse=True
     ))
     
-    # 对每个股票的交易记录按日期降序排序
+    sorted_closed_stocks = dict(sorted(
+        closed_stocks.items(),
+        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
+        reverse=True
+    ))
+    
+    # 合并排序后的结果
+    sorted_stock_stats = {**sorted_holding_stocks, **sorted_closed_stocks}
+    
+    # 对每个股票的交易记录按日期和创建时间排序
     for code in sorted_stock_stats:
         sorted_stock_stats[code]['transactions'].sort(
-            key=lambda x: x['transaction_date'],
+            key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)),
             reverse=True
         )
     
@@ -1302,6 +1403,7 @@ def process_transaction(stock, market_stats, trans, market):
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
+            stock['total_buy_quantity'] += trans.total_quantity  # 更新总买入数量
             
             if market == 'USA':
                 stock['total_buy_usd'] += trans.total_amount

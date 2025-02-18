@@ -163,70 +163,71 @@
                                 </td>
                                 <td></td>
                                 <td>{{ code }}
-                                    {% if stock.stock_name %}
-                                    <small class="text-muted ms-1">{{ stock.stock_name }}</small>
+                                    {% if stock.name %}
+                                    <br>
+                                    <small class="text-muted">{{ stock.name }}</small>
                                     {% endif %}
                                 </td>
                                 <td class="text-end fw-bold">{{ stock.current_quantity }}</td>
-                                <td class="text-end">{{ stock.transaction_count }}笔</td>
+                                <td class="text-end">{{ stock.transaction_count }}</td>
                                 <td class="text-end text-danger">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_buy_usd) }} USD
+                                        {{ "{:,.2f}".format(stock.total_buy_usd) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.total_buy) }} HKD
+                                        {{ "{:,.2f}".format(stock.total_buy) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:.3f}".format(stock.avg_cost_usd) }} USD
+                                        {{ "{:.3f}".format(stock.avg_cost_usd) }}
                                     {% else %}
-                                        {{ "{:.3f}".format(stock.avg_cost) }} HKD
+                                        {{ "{:.3f}".format(stock.avg_cost) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_sell_usd) }} USD
+                                        {{ "{:,.2f}".format(stock.total_sell_usd) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.total_sell) }} HKD
+                                        {{ "{:,.2f}".format(stock.total_sell) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_fees_usd) }} USD
+                                        {{ "{:,.2f}".format(stock.total_fees_usd) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.total_fees) }} HKD
+                                        {{ "{:,.2f}".format(stock.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }} USD
+                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }}
                                         <br>
-                                        <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }} HKD)</small>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }})</small>
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.realized_profit) }} HKD
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end current-price">
                                     {% if market == 'USA' %}
-                                        {{ "{:.3f}".format(stock.current_price) }} USD
+                                        {{ "{:.3f}".format(stock.current_price) }}
                                     {% else %}
-                                        {{ "{:.3f}".format(stock.current_price) }} HKD
+                                        {{ "{:.3f}".format(stock.current_price) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.market_value / stock.exchange_rate) }} USD
+                                        {{ "{:,.2f}".format(stock.market_value / stock.exchange_rate) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.market_value) }} HKD
+                                        {{ "{:,.2f}".format(stock.market_value) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.total_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_profit_usd) }} USD
+                                        {{ "{:,.2f}".format(stock.total_profit_usd) }}
                                         <br>
-                                        <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }} HKD)</small>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }})</small>
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.total_profit) }} HKD
+                                        {{ "{:,.2f}".format(stock.total_profit) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.profit_rate > 0 else 'text-danger' }}">
@@ -250,9 +251,9 @@
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'BUY' %}
                                         {% if market == 'USA' %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% else %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% endif %}
                                     {% else %}
                                         -
@@ -260,17 +261,17 @@
                                 </td>
                                 <td class="text-end small">
                                     {% if market == 'USA' %}
-                                        {{ "%.3f"|format(trans.average_price) }} USD
+                                        {{ "%.3f"|format(trans.average_price) }}
                                     {% else %}
-                                        {{ "%.3f"|format(trans.average_price) }} HKD
+                                        {{ "%.3f"|format(trans.average_price) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'SELL' %}
                                         {% if market == 'USA' %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% else %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% endif %}
                                     {% else %}
                                         -
@@ -278,19 +279,15 @@
                                 </td>
                                 <td class="text-end small">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(trans.total_fees) }} USD
+                                        {{ "{:,.2f}".format(trans.total_fees) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(trans.total_fees) }} HKD
+                                        {{ "{:,.2f}".format(trans.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'SELL' and trans.profit is defined %}
                                         <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
-                                            {% if market == 'USA' %}
-                                                {{ "{:,.2f}".format(trans.profit) }} USD
-                                            {% else %}
-                                                {{ "{:,.2f}".format(trans.profit) }} HKD
-                                            {% endif %}
+                                            {{ "{:,.2f}".format(trans.profit) }}
                                             <br>
                                             <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
                                         </span>
@@ -340,8 +337,9 @@
                                 </td>
                                 <td></td>
                                 <td>{{ code }}
-                                    {% if stock.stock_name %}
-                                    <small class="text-muted ms-1">{{ stock.stock_name }}</small>
+                                    {% if stock.name %}
+                                    <br>
+                                    <small class="text-muted">{{ stock.name }}</small>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">-</td>
@@ -415,9 +413,9 @@
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'BUY' %}
                                         {% if market == 'USA' %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% else %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% endif %}
                                     {% else %}
                                         -
@@ -425,17 +423,17 @@
                                 </td>
                                 <td class="text-end small">
                                     {% if market == 'USA' %}
-                                        {{ "%.3f"|format(trans.average_price) }} USD
+                                        {{ "%.3f"|format(trans.average_price) }}
                                     {% else %}
-                                        {{ "%.3f"|format(trans.average_price) }} HKD
+                                        {{ "%.3f"|format(trans.average_price) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'SELL' %}
                                         {% if market == 'USA' %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} USD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% else %}
-                                            {{ "{:,.2f}".format(trans.total_amount) }} HKD
+                                            {{ "{:,.2f}".format(trans.total_amount) }}
                                         {% endif %}
                                     {% else %}
                                         -
@@ -443,9 +441,9 @@
                                 </td>
                                 <td class="text-end small">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(trans.total_fees) }} USD
+                                        {{ "{:,.2f}".format(trans.total_fees) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(trans.total_fees) }} HKD
+                                        {{ "{:,.2f}".format(trans.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
@@ -465,6 +463,14 @@
                                 <td class="text-end small text-muted">
                                     {% if trans.exchange_rate %}
                                     汇率: {{ "{:.3f}".format(trans.exchange_rate) }}
+                                    {% if trans.transaction_type == 'SELL' and trans.fifo_cost_details %}
+                                        <br>
+                                        <small>成本明细:</small>
+                                        {% for detail in trans.fifo_cost_details %}
+                                            <br>
+                                            <small>{{ detail.quantity }}股@{{ "%.3f"|format(detail.price) }}</small>
+                                        {% endfor %}
+                                    {% endif %}
                                     {% endif %}
                                 </td>
                             </tr>
