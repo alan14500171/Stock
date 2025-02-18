@@ -68,7 +68,7 @@ def calculate_stats(transactions):
         }
     
     # 按时间顺序处理交易
-    for trans in sorted(transactions, key=lambda x: x.transaction_date):
+    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at)):
         market = trans.market
         code = trans.stock_code
         
