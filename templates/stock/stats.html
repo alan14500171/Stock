@@ -150,7 +150,17 @@
                                 </td>
                                 <td></td>
                                 <td class="text-start ps-4">持仓股票</td>
-                                <td colspan="11"></td>
+                                <td class="text-end holding-quantity">-</td>
+                                <td class="text-end holding-count">-</td>
+                                <td class="text-end holding-buy text-danger">-</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end holding-sell text-success">-</td>
+                                <td class="text-end holding-fees">-</td>
+                                <td class="text-end holding-profit">-</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end holding-market-value text-success">-</td>
+                                <td class="text-end holding-total-profit">-</td>
+                                <td class="text-end holding-profit-rate">-</td>
                             </tr>
                             
                             {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity > 0 %}
@@ -328,7 +338,17 @@
                                 </td>
                                 <td></td>
                                 <td class="text-start ps-4">已清仓股票</td>
-                                <td colspan="11"></td>
+                                <td class="text-end closed-quantity">-</td>
+                                <td class="text-end closed-count">-</td>
+                                <td class="text-end closed-buy text-danger">-</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end closed-sell text-success">-</td>
+                                <td class="text-end closed-fees">-</td>
+                                <td class="text-end closed-profit">-</td>
+                                <td class="text-end">-</td>
+                                <td class="text-end closed-market-value text-success">-</td>
+                                <td class="text-end closed-total-profit">-</td>
+                                <td class="text-end closed-profit-rate">-</td>
                             </tr>
                             
                             {% for code, stock in stock_stats.items() if stock.market == market and stock.current_quantity == 0 %}
@@ -700,6 +720,113 @@ document.addEventListener('DOMContentLoaded', function() {
         // 强制刷新页面
         window.location.reload(true);
     });
+
+    // 计算持仓和已清仓股票汇总数据
+    function calculateSummary() {
+        // 遍历每个市场
+        document.querySelectorAll('.market-row').forEach(marketRow => {
+            const market = marketRow.dataset.market;
+            
+            // 持仓股票汇总
+            let holdingStats = {
+                count: 0,
+                quantity: 0,
+                buy: 0,
+                sell: 0,
+                fees: 0,
+                profit: 0,
+                marketValue: 0,
+                totalProfit: 0
+            };
+            
+            // 已清仓股票汇总
+            let closedStats = {
+                count: 0,
+                quantity: 0,
+                buy: 0,
+                sell: 0,
+                fees: 0,
+                profit: 0,
+                marketValue: 0,
+                totalProfit: 0
+            };
+            
+            // 计算持仓股票汇总
+            document.querySelectorAll(`.stock-row[data-market="${market}"][data-holding="true"]`).forEach(row => {
+                holdingStats.count++;
+                holdingStats.quantity += parseFloat(row.cells[3].textContent) || 0;
+                holdingStats.buy += parseFloat(row.cells[5].textContent.replace(/,/g, '')) || 0;
+                holdingStats.sell += parseFloat(row.cells[7].textContent.replace(/,/g, '')) || 0;
+                holdingStats.fees += parseFloat(row.cells[8].textContent.replace(/,/g, '')) || 0;
+                holdingStats.profit += parseFloat(row.cells[9].textContent.replace(/,/g, '')) || 0;
+                holdingStats.marketValue += parseFloat(row.cells[11].textContent.replace(/,/g, '')) || 0;
+                holdingStats.totalProfit += parseFloat(row.cells[12].textContent.replace(/,/g, '')) || 0;
+            });
+            
+            // 计算已清仓股票汇总
+            document.querySelectorAll(`.stock-row[data-market="${market}"][data-holding="false"]`).forEach(row => {
+                closedStats.count++;
+                closedStats.buy += parseFloat(row.cells[5].textContent.replace(/,/g, '')) || 0;
+                closedStats.sell += parseFloat(row.cells[7].textContent.replace(/,/g, '')) || 0;
+                closedStats.fees += parseFloat(row.cells[8].textContent.replace(/,/g, '')) || 0;
+                closedStats.profit += parseFloat(row.cells[9].textContent.replace(/,/g, '')) || 0;
+                closedStats.totalProfit += parseFloat(row.cells[12].textContent.replace(/,/g, '')) || 0;
+            });
+            
+            // 更新持仓汇总行
+            const holdingRow = document.querySelector(`.holding-row[data-market="${market}"][data-holding="true"]`);
+            if (holdingRow) {
+                holdingRow.querySelector('.holding-count').textContent = holdingStats.count;
+                holdingRow.querySelector('.holding-quantity').textContent = holdingStats.quantity;
+                holdingRow.querySelector('.holding-buy').textContent = holdingStats.buy.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                holdingRow.querySelector('.holding-sell').textContent = holdingStats.sell.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                holdingRow.querySelector('.holding-fees').textContent = holdingStats.fees.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                holdingRow.querySelector('.holding-profit').textContent = holdingStats.profit.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                holdingRow.querySelector('.holding-market-value').textContent = holdingStats.marketValue.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                holdingRow.querySelector('.holding-total-profit').textContent = holdingStats.totalProfit.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                
+                // 计算并更新盈亏率
+                const profitRate = (holdingStats.totalProfit / holdingStats.buy * 100) || 0;
+                holdingRow.querySelector('.holding-profit-rate').textContent = profitRate.toFixed(1) + '%';
+                
+                // 设置盈亏颜色
+                holdingRow.querySelector('.holding-profit').classList.toggle('text-success', holdingStats.profit > 0);
+                holdingRow.querySelector('.holding-profit').classList.toggle('text-danger', holdingStats.profit < 0);
+                holdingRow.querySelector('.holding-total-profit').classList.toggle('text-success', holdingStats.totalProfit > 0);
+                holdingRow.querySelector('.holding-total-profit').classList.toggle('text-danger', holdingStats.totalProfit < 0);
+                holdingRow.querySelector('.holding-profit-rate').classList.toggle('text-success', profitRate > 0);
+                holdingRow.querySelector('.holding-profit-rate').classList.toggle('text-danger', profitRate < 0);
+            }
+            
+            // 更新已清仓汇总行
+            const closedRow = document.querySelector(`.holding-row[data-market="${market}"][data-holding="false"]`);
+            if (closedRow) {
+                closedRow.querySelector('.closed-count').textContent = closedStats.count;
+                closedRow.querySelector('.closed-buy').textContent = closedStats.buy.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                closedRow.querySelector('.closed-sell').textContent = closedStats.sell.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                closedRow.querySelector('.closed-fees').textContent = closedStats.fees.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                closedRow.querySelector('.closed-profit').textContent = closedStats.profit.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                closedRow.querySelector('.closed-total-profit').textContent = closedStats.totalProfit.toLocaleString('zh-HK', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                
+                // 计算并更新盈亏率
+                const profitRate = (closedStats.totalProfit / closedStats.buy * 100) || 0;
+                closedRow.querySelector('.closed-profit-rate').textContent = profitRate.toFixed(1) + '%';
+                
+                // 设置盈亏颜色
+                closedRow.querySelector('.closed-profit').classList.toggle('text-success', closedStats.profit > 0);
+                closedRow.querySelector('.closed-profit').classList.toggle('text-danger', closedStats.profit < 0);
+                closedRow.querySelector('.closed-total-profit').classList.toggle('text-success', closedStats.totalProfit > 0);
+                closedRow.querySelector('.closed-total-profit').classList.toggle('text-danger', closedStats.totalProfit < 0);
+                closedRow.querySelector('.closed-profit-rate').classList.toggle('text-success', profitRate > 0);
+                closedRow.querySelector('.closed-profit-rate').classList.toggle('text-danger', profitRate < 0);
+            }
+        });
+    }
+
+    // 在页面加载和展开/收起操作后计算汇总
+    calculateSummary();
+    document.getElementById('expandAll').addEventListener('click', calculateSummary);
+    document.getElementById('collapseAll').addEventListener('click', calculateSummary);
 });
 
 // 更新市场价值函数
