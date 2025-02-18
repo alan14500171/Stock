@@ -19,7 +19,7 @@ def setup_git_credentials():
         # 配置 Git 凭据存储
         subprocess.check_call(["sudo", "/volume1/@appstore/Git/bin/git", "config", "--global", "credential.helper", "store"])
         # 创建凭据文件
-        credentials = "https://alan:gogs-12345@192.168.0.109:3000"
+        credentials = "http://alan@192.168.0.109:3000"
         home_dir = os.path.expanduser("~")
         with open(os.path.join(home_dir, ".git-credentials"), "w") as f:
             f.write(credentials)
@@ -81,6 +81,7 @@ def main():
     # 确保目录是一个 Git 仓库
     if not os.path.exists(os.path.join(repo_path, ".git")):
         logging.info("初始化 Git 仓库...")
+        os.makedirs(repo_path, exist_ok=True)
         os.chdir(repo_path)
         subprocess.check_call(["sudo", "/volume1/@appstore/Git/bin/git", "init"])
         subprocess.check_call(["sudo", "/volume1/@appstore/Git/bin/git", "remote", "add", "origin", "http://192.168.0.109:3000/alan/stock.git"])
