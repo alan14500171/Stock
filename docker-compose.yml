@@ -1,1 +1,13 @@
-version: "3"\nservices:\n  stock-app:\n    build: .\n    container_name: stock-app\n    ports:\n      - "9009:9009"\n    volumes:\n      - .:/app\n    environment:\n      - FLASK_APP=app.py\n      - FLASK_ENV=production\n    restart: always
+version: "3"
+services:
+  stock-app:
+    build: .
+    container_name: stock-app
+    ports:
+      - "9009:9009"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_APP=main.py
+      - FLASK_ENV=production
+    restart: always

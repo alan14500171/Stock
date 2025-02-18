@@ -22,8 +22,8 @@ lxml==5.1.0
 html5lib==1.1
 
 # 数据处理
-pandas==2.2.1
-numpy==1.26.4
+pandas==1.5.3
+numpy==1.24.4
 
 # 时间处理
 pytz==2024.1

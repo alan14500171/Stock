@@ -1,1 +1,12 @@
-FROM python:3.8\n\nWORKDIR /app\n\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\n\nCOPY . .\n\nEXPOSE 9009\n\nCMD ["python", "app.py"]
+FROM python:3.8
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+EXPOSE 9009
+
+CMD ["python", "main.py"]
