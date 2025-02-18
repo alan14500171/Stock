@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, make_response
 from models import db, StockTransaction, StockTransactionDetail, ExchangeRate, Stock
 from routes.auth import login_required
 from datetime import datetime, timedelta
@@ -23,54 +23,53 @@ def calculate_stats(transactions):
     # 初始化市场统计
     def init_market_stats():
         return {
-            'transaction_count': 0,  # 交易笔数
-            'total_buy': 0,         # 买入总额(HKD)
-            'total_buy_usd': 0,     # 买入总额(USD，仅USA市场)
-            'total_sell': 0,        # 卖出总额(HKD)
-            'total_sell_usd': 0,    # 卖出总额(USD，仅USA市场)
-            'total_fees': 0,        # 总费用(HKD)
-            'total_fees_usd': 0,    # 总费用(USD，仅USA市场)
-            'realized_profit': 0,   # 已实现盈亏(HKD)
-            'realized_profit_usd': 0, # 已实现盈亏(USD，仅USA市场)
-            'market_value': 0,      # 当前市值(HKD)
-            'market_value_usd': 0,  # 当前市值(USD，仅USA市场)
-            'total_profit': 0,      # 总盈亏(HKD)
-            'total_profit_usd': 0,  # 总盈亏(USD，仅USA市场)
-            'profit_rate': 0,       # 总盈亏比例
-            'exchange_rate': 1.0    # 当前汇率，默认为1.0
+            'transaction_count': 0,     # 交易笔数
+            'total_buy': 0,            # 买入总额(原始币种)
+            'total_buy_hkd': 0,        # 买入总额(港币)
+            'total_sell': 0,           # 卖出总额(原始币种)
+            'total_sell_hkd': 0,       # 卖出总额(港币)
+            'total_fees': 0,           # 总费用(原始币种)
+            'total_fees_hkd': 0,       # 总费用(港币)
+            'realized_profit': 0,      # 已实现盈亏(原始币种)
+            'realized_profit_hkd': 0,  # 已实现盈亏(港币)
+            'market_value': 0,         # 当前市值(原始币种)
+            'market_value_hkd': 0,     # 当前市值(港币)
+            'total_profit': 0,         # 总盈亏(原始币种)
+            'total_profit_hkd': 0,     # 总盈亏(港币)
+            'profit_rate': 0,          # 总盈亏比例
+            'exchange_rate': 1.0       # 当前汇率,港股为1.0
         }
     
     # 初始化股票统计
     def init_stock_stats():
         return {
             'market': '',              # 市场
-            'name': '',               # 添加公司名称字段
+            'name': '',                # 公司名称
             'current_quantity': 0,     # 当前持仓数量
             'total_buy_quantity': 0,   # 总买入数量
             'transaction_count': 0,    # 交易笔数
-            'total_buy': 0,           # 买入总额(HKD)
-            'total_buy_usd': 0,       # 买入总额(USD，仅USA市场)
-            'total_sell': 0,          # 卖出总额(HKD)
-            'total_sell_usd': 0,      # 卖出总额(USD，仅USA市场)
-            'total_fees': 0,          # 总费用(HKD)
-            'total_fees_usd': 0,      # 总费用(USD，仅USA市场)
-            'avg_cost': 0,            # 平均成本(HKD)
-            'avg_cost_usd': 0,        # 平均成本(USD，仅USA市场)
-            'realized_profit': 0,      # 已实现盈亏(HKD)
-            'realized_profit_usd': 0,  # 已实现盈亏(USD，仅USA市场)
-            'market_value': 0,         # 当前市值(HKD)
-            'market_value_usd': 0,     # 当前市值(USD，仅USA市场)
-            'total_profit': 0,         # 总盈亏(HKD)
-            'total_profit_usd': 0,     # 总盈亏(USD，仅USA市场)
+            'total_buy': 0,           # 买入总额(原始币种)
+            'total_buy_hkd': 0,       # 买入总额(港币)
+            'total_sell': 0,          # 卖出总额(原始币种)
+            'total_sell_hkd': 0,      # 卖出总额(港币)
+            'total_fees': 0,          # 总费用(原始币种)
+            'total_fees_hkd': 0,      # 总费用(港币)
+            'avg_cost': 0,            # 平均成本(原始币种)
+            'realized_profit': 0,      # 已实现盈亏(原始币种)
+            'realized_profit_hkd': 0,  # 已实现盈亏(港币)
+            'market_value': 0,         # 当前市值(原始币种)
+            'market_value_hkd': 0,     # 当前市值(港币)
+            'total_profit': 0,         # 总盈亏(原始币种)
+            'total_profit_hkd': 0,     # 总盈亏(港币)
             'profit_rate': 0,          # 总盈亏比例
             'current_price': 0,        # 当前价格
             'transactions': [],        # 交易记录
             'fifo_queue': [],         # FIFO队列
-            'exchange_rate': 1.0       # 当前汇率，默认为1.0
+            'exchange_rate': 1.0       # 当前汇率,港股为1.0
         }
     
     # 按时间顺序处理交易
-    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at), reverse=True):
+    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.created_at)):
         market = trans.market
         code = trans.stock_code
         
@@ -93,42 +92,48 @@ def calculate_stats(transactions):
         stock['transaction_count'] += 1
         market_stats[market]['transaction_count'] += 1
         
-        if market == 'USA':
-            stock['total_fees_usd'] += trans.total_fees
-            market_stats[market]['total_fees_usd'] += trans.total_fees
-            stock['total_fees'] += trans.total_fees * trans.exchange_rate
-            market_stats[market]['total_fees'] += trans.total_fees * trans.exchange_rate
+        # 更新费用(原始币种)
+        stock['total_fees'] += trans.total_fees
+        market_stats[market]['total_fees'] += trans.total_fees
+        
+        # 转换为港币
+        if market != 'HK':
+            fees_hkd = trans.total_fees * trans.exchange_rate
+            stock['total_fees_hkd'] += fees_hkd
+            market_stats[market]['total_fees_hkd'] += fees_hkd
         else:
-            stock['total_fees'] += trans.total_fees
-            market_stats[market]['total_fees'] += trans.total_fees
+            stock['total_fees_hkd'] += trans.total_fees
+            market_stats[market]['total_fees_hkd'] += trans.total_fees
         
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity  # 更新总买入数量
+            stock['total_buy_quantity'] += trans.total_quantity
             
-            if market == 'USA':
-                stock['total_buy_usd'] += trans.total_amount
-                market_stats[market]['total_buy_usd'] += trans.total_amount
-                stock['total_buy'] += trans.total_amount_hkd
-                market_stats[market]['total_buy'] += trans.total_amount_hkd
-                stock['avg_cost_usd'] = stock['total_buy_usd'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
+            # 更新买入总额(原始币种)
+            stock['total_buy'] += trans.total_amount
+            market_stats[market]['total_buy'] += trans.total_amount
+            
+            # 转换为港币
+            if market != 'HK':
+                buy_amount_hkd = trans.total_amount * trans.exchange_rate
+                stock['total_buy_hkd'] += buy_amount_hkd
+                market_stats[market]['total_buy_hkd'] += buy_amount_hkd
             else:
-                stock['total_buy'] += trans.total_amount
-                market_stats[market]['total_buy'] += trans.total_amount
+                stock['total_buy_hkd'] += trans.total_amount
+                market_stats[market]['total_buy_hkd'] += trans.total_amount
             
+            # 计算平均成本(原始币种)
             stock['avg_cost'] = stock['total_buy'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
             
-            # 添加到FIFO队列，包含买入费用
+            # 添加到FIFO队列
             stock['fifo_queue'].append({
                 'quantity': trans.total_quantity,
                 'price': trans.total_amount / trans.total_quantity,  # 原始币种单位成本
-                'price_hkd': trans.total_amount_hkd / trans.total_quantity,  # 港币单位成本
                 'date': trans.transaction_date,
                 'exchange_rate': trans.exchange_rate,
-                'fees': trans.total_fees,  # 记录买入费用
-                'total_cost': trans.total_amount + trans.total_fees,  # 总成本（含费用）
-                'total_cost_hkd': trans.total_amount_hkd + trans.total_fees  # 港币总成本（含费用）
+                'fees': trans.total_fees,
+                'total_cost': trans.total_amount + trans.total_fees  # 总成本（含费用）
             })
             
             # 记录买入交易详情
@@ -150,20 +155,26 @@ def calculate_stats(transactions):
             # 卖出交易处理
             stock['current_quantity'] -= trans.total_quantity
             
-            if market == 'USA':
-                stock['total_sell_usd'] += trans.total_amount
-                market_stats[market]['total_sell_usd'] += trans.total_amount
-                stock['total_sell'] += trans.total_amount_hkd
-                market_stats[market]['total_sell'] += trans.total_amount_hkd
+            # 更新卖出总额(原始币种)
+            stock['total_sell'] += trans.total_amount
+            market_stats[market]['total_sell'] += trans.total_amount
+            
+            # 转换为港币
+            if market != 'HK':
+                sell_amount_hkd = trans.total_amount * trans.exchange_rate
+                stock['total_sell_hkd'] += sell_amount_hkd
+                market_stats[market]['total_sell_hkd'] += sell_amount_hkd
             else:
-                stock['total_sell'] += trans.total_amount
-                market_stats[market]['total_sell'] += trans.total_amount
+                stock['total_sell_hkd'] += trans.total_amount
+                market_stats[market]['total_sell_hkd'] += trans.total_amount
             
             # 计算FIFO成本和盈亏
             remaining_quantity = trans.total_quantity
             total_cost = 0  # 原始币种的总成本（含买入费用）
-            total_cost_hkd = 0  # 港币总成本（含买入费用）
-            fifo_cost_details = []  # FIFO成本明细
+            fifo_cost_details = []
+            
+            # 确保按时间顺序处理买入记录
+            stock['fifo_queue'].sort(key=lambda x: x['date'])
             
             while remaining_quantity > 0 and stock['fifo_queue']:
                 buy_record = stock['fifo_queue'][0]
@@ -172,26 +183,22 @@ def calculate_stats(transactions):
                 # 计算这部分股票的成本（包含买入费用）
                 cost_ratio = used_quantity / buy_record['quantity']
                 unit_cost = buy_record['price']  # 原始币种单位成本
-                unit_cost_hkd = buy_record['price_hkd']  # 港币单位成本
                 buy_fees = buy_record['fees'] * cost_ratio  # 分摊的买入费用
                 
                 cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
-                cost_hkd = unit_cost_hkd * used_quantity + buy_fees  # 港币成本（含买入费用）
+                total_cost += cost  # 累加总成本
+                
+                print(f"DEBUG: Processing buy record - quantity: {used_quantity}, unit_cost: {unit_cost}, fees: {buy_fees}, total_cost: {cost}")
                 
                 # 记录FIFO成本明细
                 fifo_cost_details.append({
                     'date': buy_record['date'],
                     'quantity': used_quantity,
                     'price': unit_cost,
-                    'price_hkd': unit_cost_hkd,
                     'cost': cost,
-                    'cost_hkd': cost_hkd,
                     'exchange_rate': buy_record['exchange_rate'],
-                    'fees': buy_fees  # 记录分摊的买入费用
+                    'fees': buy_fees
                 })
-                
-                total_cost += cost
-                total_cost_hkd += cost_hkd
                 
                 # 更新或移除买入记录
                 buy_record['quantity'] -= used_quantity
@@ -199,26 +206,16 @@ def calculate_stats(transactions):
                     stock['fifo_queue'].pop(0)
                 remaining_quantity -= used_quantity
             
-            # 计算利润（减去所有相关费用）
-            if market == 'USA':
-                # 美股：直接用美元计算
-                net_income = trans.total_amount - trans.total_fees  # 卖出净收入
-                profit_usd = net_income - total_cost  # 利润 = 净收入 - 总成本（已包含买入费用）
-                profit_hkd = profit_usd * trans.exchange_rate
-                profit_rate = profit_usd / total_cost if total_cost > 0 else 0
-                
-                stock['realized_profit_usd'] += profit_usd
-                market_stats[market]['realized_profit_usd'] += profit_usd
-                stock['realized_profit'] += profit_hkd
-                market_stats[market]['realized_profit'] += profit_hkd
-            else:
-                # 港股：直接用港币计算
-                net_income = trans.total_amount_hkd - trans.total_fees  # 卖出净收入
-                profit = net_income - total_cost_hkd  # 利润 = 净收入 - 总成本（已包含买入费用）
-                profit_rate = profit / total_cost_hkd if total_cost_hkd > 0 else 0
-                
-                stock['realized_profit'] += profit
-                market_stats[market]['realized_profit'] += profit
+            # 计算利润（原始币种）
+            sell_amount = trans.total_amount
+            sell_fees = trans.total_fees
+            net_income = sell_amount - sell_fees
+            profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
+            
+            print(f"DEBUG: Sell calculation - amount: {sell_amount}, fees: {sell_fees}, net_income: {net_income}, total_cost: {total_cost}, profit: {profit}")
+            
+            # 计算利润率
+            profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
             
             # 记录卖出交易详情
             trans_detail = {
@@ -231,14 +228,26 @@ def calculate_stats(transactions):
                 'average_price': trans.average_price,
                 'total_fees': trans.total_fees,
                 'exchange_rate': trans.exchange_rate,
-                'fifo_price': total_cost / trans.total_quantity if trans.total_quantity > 0 else 0,
-                'fifo_price_hkd': total_cost_hkd / trans.total_quantity if trans.total_quantity > 0 else 0,
-                'profit': profit_usd if market == 'USA' else profit,
-                'profit_rate': profit_rate,
-                'fifo_cost_details': fifo_cost_details
+                'fifo_cost_details': fifo_cost_details,
+                'profit': profit,  # 使用实际盈亏值
+                'profit_rate': profit_rate,  # 使用实际盈亏率
+                'total_cost': total_cost  # 添加总成本信息用于验证
             }
             
             stock['transactions'].append(trans_detail)
+            
+            # 更新已实现盈亏(原始币种)
+            stock['realized_profit'] += profit  # 累加实际的盈亏值
+            market_stats[market]['realized_profit'] += profit  # 累加实际的盈亏值
+            
+            # 转换为港币
+            if market != 'HK':
+                profit_hkd = profit * trans.exchange_rate
+                stock['realized_profit_hkd'] += profit_hkd
+                market_stats[market]['realized_profit_hkd'] += profit_hkd
+            else:
+                stock['realized_profit_hkd'] += profit
+                market_stats[market]['realized_profit_hkd'] += profit
     
     # 计算当前市值和总盈亏
     for code, stock in stock_stats.items():
@@ -248,92 +257,61 @@ def calculate_stats(transactions):
             if current_price:
                 stock['current_price'] = current_price['price']
                 
-                # 计算市值
-                if stock['market'] == 'USA':
-                    # 获取当前汇率
+                # 计算市值(原始币种)
+                market_value = stock['current_price'] * stock['current_quantity']
+                stock['market_value'] = market_value
+                market_stats[stock['market']]['market_value'] += market_value
+                
+                # 计算未实现盈亏(原始币种)
+                remaining_buy_fees = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
+                current_position_cost = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees
+                unrealized_profit = market_value - current_position_cost
+                
+                # 总盈亏(原始币种) = 已实现盈亏 + 未实现盈亏
+                stock['total_profit'] = stock['realized_profit'] + unrealized_profit
+                
+                # 转换为港币(如果不是港股)
+                if stock['market'] != 'HK':
                     exchange_rate = get_exchange_rate('USD', datetime.now().strftime('%Y-%m-%d'))
                     if exchange_rate:
                         stock['exchange_rate'] = exchange_rate
                         market_stats[stock['market']]['exchange_rate'] = exchange_rate
                         
-                        # 计算美元市值
-                        market_value_usd = stock['current_price'] * stock['current_quantity']
-                        stock['market_value_usd'] = market_value_usd
-                        market_stats[stock['market']]['market_value_usd'] += market_value_usd
+                        stock['market_value_hkd'] = market_value * exchange_rate
+                        market_stats[stock['market']]['market_value_hkd'] += market_value * exchange_rate
                         
-                        # 计算港币市值
-                        market_value_hkd = market_value_usd * exchange_rate
-                        stock['market_value'] = market_value_hkd
-                        market_stats[stock['market']]['market_value'] += market_value_hkd
-                        
-                        # 计算未实现盈亏（美元）
-                        # 当前持仓成本 = 平均成本 * 数量 + 剩余持仓对应的买入费用
-                        remaining_buy_fees_usd = stock['total_fees_usd'] * (stock['current_quantity'] / stock['total_buy_quantity'])
-                        current_position_cost_usd = (stock['avg_cost_usd'] * stock['current_quantity']) + remaining_buy_fees_usd
-                        unrealized_profit_usd = market_value_usd - current_position_cost_usd
-                        
-                        # 总盈亏 = 已实现盈亏 + 未实现盈亏
-                        stock['total_profit_usd'] = stock['realized_profit_usd'] + unrealized_profit_usd
-                        
-                        # 计算未实现盈亏（港币）
-                        remaining_buy_fees_hkd = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
-                        current_position_cost_hkd = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees_hkd
-                        unrealized_profit_hkd = market_value_hkd - current_position_cost_hkd
-                        
-                        # 总盈亏（港币） = 已实现盈亏 + 未实现盈亏
-                        stock['total_profit'] = stock['realized_profit'] + unrealized_profit_hkd
-                        
-                        # 计算盈亏率（使用美元）
-                        total_cost_with_fees_usd = current_position_cost_usd + stock['total_fees_usd'] * (stock['total_buy_quantity'] - stock['current_quantity']) / stock['total_buy_quantity']
-                        if total_cost_with_fees_usd > 0:
-                            stock['profit_rate'] = stock['total_profit_usd'] / total_cost_with_fees_usd * 100
+                        stock['total_profit_hkd'] = stock['total_profit'] * exchange_rate
                 else:
-                    # 港股：直接用港币计算
-                    market_value = stock['current_price'] * stock['current_quantity']
-                    stock['market_value'] = market_value
-                    market_stats[stock['market']]['market_value'] += market_value
-                    
-                    # 计算未实现盈亏，包含费用成本
-                    remaining_buy_fees = stock['total_fees'] * (stock['current_quantity'] / stock['total_buy_quantity'])
-                    current_position_cost = (stock['avg_cost'] * stock['current_quantity']) + remaining_buy_fees
-                    unrealized_profit = market_value - current_position_cost
-                    
-                    # 总盈亏 = 已实现盈亏 + 未实现盈亏
-                    stock['total_profit'] = stock['realized_profit'] + unrealized_profit
-                    
-                    # 计算盈亏率
-                    total_cost_with_fees = current_position_cost + stock['total_fees'] * (stock['total_buy_quantity'] - stock['current_quantity']) / stock['total_buy_quantity']
-                    if total_cost_with_fees > 0:
-                        stock['profit_rate'] = stock['total_profit'] / total_cost_with_fees * 100
+                    stock['market_value_hkd'] = market_value
+                    market_stats[stock['market']]['market_value_hkd'] += market_value
+                    stock['total_profit_hkd'] = stock['total_profit']
+                
+                # 计算盈亏率
+                if stock['total_buy'] > 0:
+                    stock['profit_rate'] = (stock['total_profit'] / stock['total_buy']) * 100
+        else:
+            # 已清仓股票：总盈亏等于已实现盈亏
+            stock['total_profit'] = stock['realized_profit']
+            stock['total_profit_hkd'] = stock['realized_profit_hkd']
+            
+            # 盈亏率 = 已实现盈亏 / 总买入金额（不包含费用）
+            if stock['total_buy'] > 0:
+                stock['profit_rate'] = (stock['realized_profit'] / stock['total_buy']) * 100
+            
+            # 已清仓股票的市值为0
+            stock['market_value'] = 0
+            stock['market_value_hkd'] = 0
+            stock['current_price'] = 0
     
     # 计算市场级别的总盈亏和盈亏率
     for market, stats in market_stats.items():
-        if market == 'USA':
-            # 美股市场：美元计算
-            # 总盈亏 = 已实现盈亏 + 未实现盈亏
-            # 未实现盈亏 = 当前市值 - 当前持仓成本
-            # 当前持仓成本 = 总买入 - 已卖出部分的成本（等于已实现盈亏 + 卖出金额 - 卖出费用）
-            current_position_cost_usd = stats['total_buy_usd'] - (stats['realized_profit_usd'] + stats['total_sell_usd'] - stats['total_fees_usd'])
-            unrealized_profit_usd = stats['market_value_usd'] - current_position_cost_usd
-            stats['total_profit_usd'] = stats['realized_profit_usd'] + unrealized_profit_usd
-            
-            # 港币计算
-            current_position_cost_hkd = stats['total_buy'] - (stats['realized_profit'] + stats['total_sell'] - stats['total_fees'])
-            unrealized_profit_hkd = stats['market_value'] - current_position_cost_hkd
-            stats['total_profit'] = stats['realized_profit'] + unrealized_profit_hkd
-            
-            # 计算盈亏率（使用美元）
-            if stats['total_buy_usd'] > 0:
-                stats['profit_rate'] = stats['total_profit_usd'] / stats['total_buy_usd'] * 100
-        else:
-            # 港股市场：港币计算
-            current_position_cost = stats['total_buy'] - (stats['realized_profit'] + stats['total_sell'] - stats['total_fees'])
-            unrealized_profit = stats['market_value'] - current_position_cost
-            stats['total_profit'] = stats['realized_profit'] + unrealized_profit
-            
-            # 计算盈亏率
-            if stats['total_buy'] > 0:
-                stats['profit_rate'] = stats['total_profit'] / stats['total_buy'] * 100
+        # 总盈亏包括已实现盈亏和未实现盈亏
+        stats['total_profit'] = stats['realized_profit']
+        stats['total_profit_hkd'] = stats['realized_profit_hkd']
+        
+        # 计算盈亏率
+        if stats['total_buy'] > 0:
+            stats['profit_rate'] = (stats['realized_profit'] / stats['total_buy']) * 100
     
     # 将股票分为持仓和已清仓两组
     holding_stocks = {}
@@ -954,10 +932,20 @@ def fetch_missing_rates():
 @stock_bp.route('/stock/stats')
 @login_required
 def stats():
+    # 添加缓存控制头，确保不使用任何缓存
+    response = make_response()
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
     # 获取查询参数，但不设置默认值，允许为空
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     stock_codes = request.args.getlist('stock_codes')
+    
+    # 强制从数据库读取最新数据
+    db.session.expire_all()  # 使所有已加载的对象过期
+    db.session.commit()      # 提交任何未提交的更改
     
     # 只过滤用户ID
     query = StockTransaction.query.filter_by(user_id=session['user_id'])
@@ -970,64 +958,30 @@ def stats():
     if stock_codes:
         query = query.filter(StockTransaction.stock_code.in_(stock_codes))
     
-    # 按创建时间降序获取交易记录
-    transactions = query.order_by(StockTransaction.created_at.desc()).all()
+    # 强制重新执行查询，不使用缓存
+    transactions = query.with_for_update().all()
     
-    # 获取所有股票代码供查询使用
+    # 获取所有股票代码供查询使用，同样强制重新查询
     all_stock_codes = db.session.query(StockTransaction.stock_code)\
         .filter_by(user_id=session['user_id'])\
         .distinct()\
-        .order_by(StockTransaction.stock_code)\
+        .with_for_update()\
         .all()
     all_stock_codes = [code[0] for code in all_stock_codes]
     
     # 计算统计数据
     market_stats, stock_stats = calculate_stats(transactions)
     
-    # 将股票分为持仓和已清仓两组
-    holding_stocks = {}
-    closed_stocks = {}
+    # 渲染模板
+    template = render_template('stock/stats.html',
+                             market_stats=market_stats,
+                             stock_stats=stock_stats,
+                             all_stock_codes=all_stock_codes,
+                             selected_stock_codes=stock_codes)
     
-    for code, stock in stock_stats.items():
-        if stock['current_quantity'] > 0:
-            holding_stocks[code] = stock
-        else:
-            closed_stocks[code] = stock
-    
-    # 分别对持仓和已清仓股票按最新交易日期和系统时间排序
-    def get_latest_transaction_info(transactions):
-        if not transactions:
-            return (datetime.min, datetime.min)
-        latest = max(transactions, key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)))
-        return (latest['transaction_date'], latest.get('created_at', datetime.min))
-    
-    sorted_holding_stocks = dict(sorted(
-        holding_stocks.items(),
-        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
-        reverse=True
-    ))
-    
-    sorted_closed_stocks = dict(sorted(
-        closed_stocks.items(),
-        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
-        reverse=True
-    ))
-    
-    # 合并排序后的结果
-    sorted_stock_stats = {**sorted_holding_stocks, **sorted_closed_stocks}
-    
-    # 对每个股票的交易记录按日期和创建时间排序
-    for code in sorted_stock_stats:
-        sorted_stock_stats[code]['transactions'].sort(
-            key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)),
-            reverse=True
-        )
-    
-    return render_template('stock/stats.html',
-                         market_stats=market_stats,
-                         stock_stats=sorted_stock_stats,
-                         all_stock_codes=all_stock_codes,
-                         selected_stock_codes=stock_codes)
+    # 设置响应内容
+    response.set_data(template)
+    return response
 
 @stock_bp.route('/stocks')
 @login_required
@@ -1391,42 +1345,48 @@ def process_transaction(stock, market_stats, trans, market):
         stock['transaction_count'] += 1
         market_stats[market]['transaction_count'] += 1
         
-        if market == 'USA':
-            stock['total_fees_usd'] += trans.total_fees
-            market_stats[market]['total_fees_usd'] += trans.total_fees
-            stock['total_fees'] += trans.total_fees * trans.exchange_rate
-            market_stats[market]['total_fees'] += trans.total_fees * trans.exchange_rate
+        # 更新费用(原始币种)
+        stock['total_fees'] += trans.total_fees
+        market_stats[market]['total_fees'] += trans.total_fees
+        
+        # 转换为港币
+        if market != 'HK':
+            fees_hkd = trans.total_fees * trans.exchange_rate
+            stock['total_fees_hkd'] += fees_hkd
+            market_stats[market]['total_fees_hkd'] += fees_hkd
         else:
-            stock['total_fees'] += trans.total_fees
-            market_stats[market]['total_fees'] += trans.total_fees
+            stock['total_fees_hkd'] += trans.total_fees
+            market_stats[market]['total_fees_hkd'] += trans.total_fees
         
         if trans.transaction_type == 'BUY':
             # 买入交易处理
             stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity  # 更新总买入数量
+            stock['total_buy_quantity'] += trans.total_quantity
             
-            if market == 'USA':
-                stock['total_buy_usd'] += trans.total_amount
-                market_stats[market]['total_buy_usd'] += trans.total_amount
-                stock['total_buy'] += trans.total_amount_hkd
-                market_stats[market]['total_buy'] += trans.total_amount_hkd
-                stock['avg_cost_usd'] = stock['total_buy_usd'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
+            # 更新买入总额(原始币种)
+            stock['total_buy'] += trans.total_amount
+            market_stats[market]['total_buy'] += trans.total_amount
+            
+            # 转换为港币
+            if market != 'HK':
+                buy_amount_hkd = trans.total_amount * trans.exchange_rate
+                stock['total_buy_hkd'] += buy_amount_hkd
+                market_stats[market]['total_buy_hkd'] += buy_amount_hkd
             else:
-                stock['total_buy'] += trans.total_amount
-                market_stats[market]['total_buy'] += trans.total_amount
+                stock['total_buy_hkd'] += trans.total_amount
+                market_stats[market]['total_buy_hkd'] += trans.total_amount
             
+            # 计算平均成本(原始币种)
             stock['avg_cost'] = stock['total_buy'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
             
-            # 添加到FIFO队列，包含买入费用
+            # 添加到FIFO队列
             stock['fifo_queue'].append({
                 'quantity': trans.total_quantity,
                 'price': trans.total_amount / trans.total_quantity,  # 原始币种单位成本
-                'price_hkd': trans.total_amount_hkd / trans.total_quantity,  # 港币单位成本
                 'date': trans.transaction_date,
                 'exchange_rate': trans.exchange_rate,
-                'fees': trans.total_fees,  # 记录买入费用
-                'total_cost': trans.total_amount + trans.total_fees,  # 总成本（含费用）
-                'total_cost_hkd': trans.total_amount_hkd + trans.total_fees  # 港币总成本（含费用）
+                'fees': trans.total_fees,
+                'total_cost': trans.total_amount + trans.total_fees  # 总成本（含费用）
             })
             
             # 记录买入交易详情
@@ -1448,20 +1408,26 @@ def process_transaction(stock, market_stats, trans, market):
             # 卖出交易处理
             stock['current_quantity'] -= trans.total_quantity
             
-            if market == 'USA':
-                stock['total_sell_usd'] += trans.total_amount
-                market_stats[market]['total_sell_usd'] += trans.total_amount
-                stock['total_sell'] += trans.total_amount_hkd
-                market_stats[market]['total_sell'] += trans.total_amount_hkd
+            # 更新卖出总额(原始币种)
+            stock['total_sell'] += trans.total_amount
+            market_stats[market]['total_sell'] += trans.total_amount
+            
+            # 转换为港币
+            if market != 'HK':
+                sell_amount_hkd = trans.total_amount * trans.exchange_rate
+                stock['total_sell_hkd'] += sell_amount_hkd
+                market_stats[market]['total_sell_hkd'] += sell_amount_hkd
             else:
-                stock['total_sell'] += trans.total_amount
-                market_stats[market]['total_sell'] += trans.total_amount
+                stock['total_sell_hkd'] += trans.total_amount
+                market_stats[market]['total_sell_hkd'] += trans.total_amount
             
             # 计算FIFO成本和盈亏
             remaining_quantity = trans.total_quantity
             total_cost = 0  # 原始币种的总成本（含买入费用）
-            total_cost_hkd = 0  # 港币总成本（含买入费用）
-            fifo_cost_details = []  # FIFO成本明细
+            fifo_cost_details = []
+            
+            # 确保按时间顺序处理买入记录
+            stock['fifo_queue'].sort(key=lambda x: x['date'])
             
             while remaining_quantity > 0 and stock['fifo_queue']:
                 buy_record = stock['fifo_queue'][0]
@@ -1470,26 +1436,22 @@ def process_transaction(stock, market_stats, trans, market):
                 # 计算这部分股票的成本（包含买入费用）
                 cost_ratio = used_quantity / buy_record['quantity']
                 unit_cost = buy_record['price']  # 原始币种单位成本
-                unit_cost_hkd = buy_record['price_hkd']  # 港币单位成本
                 buy_fees = buy_record['fees'] * cost_ratio  # 分摊的买入费用
                 
                 cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
-                cost_hkd = unit_cost_hkd * used_quantity + buy_fees  # 港币成本（含买入费用）
+                total_cost += cost  # 累加总成本
+                
+                print(f"DEBUG: Processing buy record - quantity: {used_quantity}, unit_cost: {unit_cost}, fees: {buy_fees}, total_cost: {cost}")
                 
                 # 记录FIFO成本明细
                 fifo_cost_details.append({
                     'date': buy_record['date'],
                     'quantity': used_quantity,
                     'price': unit_cost,
-                    'price_hkd': unit_cost_hkd,
                     'cost': cost,
-                    'cost_hkd': cost_hkd,
                     'exchange_rate': buy_record['exchange_rate'],
-                    'fees': buy_fees  # 记录分摊的买入费用
+                    'fees': buy_fees
                 })
-                
-                total_cost += cost
-                total_cost_hkd += cost_hkd
                 
                 # 更新或移除买入记录
                 buy_record['quantity'] -= used_quantity
@@ -1497,26 +1459,16 @@ def process_transaction(stock, market_stats, trans, market):
                     stock['fifo_queue'].pop(0)
                 remaining_quantity -= used_quantity
             
-            # 计算利润（减去所有相关费用）
-            if market == 'USA':
-                # 美股：直接用美元计算
-                net_income = trans.total_amount - trans.total_fees  # 卖出净收入
-                profit_usd = net_income - total_cost  # 利润 = 净收入 - 总成本（已包含买入费用）
-                profit_hkd = profit_usd * trans.exchange_rate
-                profit_rate = profit_usd / total_cost if total_cost > 0 else 0
-                
-                stock['realized_profit_usd'] += profit_usd
-                market_stats[market]['realized_profit_usd'] += profit_usd
-                stock['realized_profit'] += profit_hkd
-                market_stats[market]['realized_profit'] += profit_hkd
-            else:
-                # 港股：直接用港币计算
-                net_income = trans.total_amount_hkd - trans.total_fees  # 卖出净收入
-                profit = net_income - total_cost_hkd  # 利润 = 净收入 - 总成本（已包含买入费用）
-                profit_rate = profit / total_cost_hkd if total_cost_hkd > 0 else 0
-                
-                stock['realized_profit'] += profit
-                market_stats[market]['realized_profit'] += profit
+            # 计算利润（原始币种）
+            sell_amount = trans.total_amount
+            sell_fees = trans.total_fees
+            net_income = sell_amount - sell_fees
+            profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
+            
+            print(f"DEBUG: Sell calculation - amount: {sell_amount}, fees: {sell_fees}, net_income: {net_income}, total_cost: {total_cost}, profit: {profit}")
+            
+            # 计算利润率
+            profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
             
             # 记录卖出交易详情
             trans_detail = {
@@ -1529,15 +1481,27 @@ def process_transaction(stock, market_stats, trans, market):
                 'average_price': trans.average_price,
                 'total_fees': trans.total_fees,
                 'exchange_rate': trans.exchange_rate,
-                'fifo_price': total_cost / trans.total_quantity if trans.total_quantity > 0 else 0,
-                'fifo_price_hkd': total_cost_hkd / trans.total_quantity if trans.total_quantity > 0 else 0,
-                'profit': profit_usd if market == 'USA' else profit,
-                'profit_rate': profit_rate,
-                'fifo_cost_details': fifo_cost_details
+                'fifo_cost_details': fifo_cost_details,
+                'profit': profit,  # 使用实际盈亏值
+                'profit_rate': profit_rate,  # 使用实际盈亏率
+                'total_cost': total_cost  # 添加总成本信息用于验证
             }
             
             stock['transactions'].append(trans_detail)
             
+            # 更新已实现盈亏(原始币种)
+            stock['realized_profit'] += profit  # 累加实际的盈亏值
+            market_stats[market]['realized_profit'] += profit  # 累加实际的盈亏值
+            
+            # 转换为港币
+            if market != 'HK':
+                profit_hkd = profit * trans.exchange_rate
+                stock['realized_profit_hkd'] += profit_hkd
+                market_stats[market]['realized_profit_hkd'] += profit_hkd
+            else:
+                stock['realized_profit_hkd'] += profit
+                market_stats[market]['realized_profit_hkd'] += profit
+    
     except Exception as e:
         print(f"Error processing transaction: {str(e)}")
         raise 

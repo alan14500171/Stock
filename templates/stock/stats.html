@@ -94,7 +94,7 @@
                                 <td class="text-end">{{ stats.transaction_count }}</td>
                                 <td class="text-end text-danger">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.total_buy_usd) }}
+                                        {{ "{:,.2f}".format(stats.total_buy) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stats.total_buy) }}
                                     {% endif %}
@@ -102,21 +102,21 @@
                                 <td class="text-end">-</td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.total_sell_usd) }}
+                                        {{ "{:,.2f}".format(stats.total_sell) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stats.total_sell) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.total_fees_usd) }}
+                                        {{ "{:,.2f}".format(stats.total_fees) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stats.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stats.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.realized_profit_usd) }}
+                                        {{ "{:,.2f}".format(stats.realized_profit) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stats.realized_profit) }}
                                     {% endif %}
@@ -124,16 +124,16 @@
                                 <td class="text-end">-</td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.market_value / stats.exchange_rate) }}
+                                        {{ "{:,.2f}".format(stats.market_value) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stats.market_value) }}
                                     {% endif %}
                                 </td>
-                                <td class="text-end {{ 'text-success' if stats.total_profit > 0 else 'text-danger' }}">
+                                <td class="text-end {{ 'text-success' if stats.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stats.total_profit_usd) }}
+                                        {{ "{:,.2f}".format(stats.realized_profit) }}
                                     {% else %}
-                                        {{ "{:,.2f}".format(stats.total_profit) }}
+                                        {{ "{:,.2f}".format(stats.realized_profit) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stats.profit_rate > 0 else 'text-danger' }}">
@@ -172,35 +172,35 @@
                                 <td class="text-end">{{ stock.transaction_count }}</td>
                                 <td class="text-end text-danger">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_buy_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_buy) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_buy) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:.3f}".format(stock.avg_cost_usd) }}
+                                        {{ "{:.3f}".format(stock.avg_cost) }}
                                     {% else %}
                                         {{ "{:.3f}".format(stock.avg_cost) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_sell_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_sell) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_sell) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_fees_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_fees) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
                                         <br>
                                         <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }})</small>
                                     {% else %}
@@ -216,14 +216,14 @@
                                 </td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.market_value / stock.exchange_rate) }}
+                                        {{ "{:,.2f}".format(stock.market_value) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.market_value) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.total_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_profit_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_profit) }}
                                         <br>
                                         <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }})</small>
                                     {% else %}
@@ -285,12 +285,16 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end small">
-                                    {% if trans.transaction_type == 'SELL' and trans.profit is defined %}
-                                        <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
-                                            {{ "{:,.2f}".format(trans.profit) }}
-                                            <br>
-                                            <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
-                                        </span>
+                                    {% if trans.transaction_type == 'SELL' %}
+                                        {% if trans.get('profit') is not none %}
+                                            <span class="{{ 'text-success' if trans.get('profit', 0) > 0 else 'text-danger' }}">
+                                                {{ "{:,.2f}".format(trans.get('profit', 0)) }}
+                                                <br>
+                                                <small>{{ "{:.1f}%".format(trans.get('profit_rate', 0)) }}</small>
+                                            </span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
                                     {% else %}
                                         -
                                     {% endif %}
@@ -346,35 +350,35 @@
                                 <td class="text-end">{{ stock.transaction_count }}</td>
                                 <td class="text-end text-danger">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_buy_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_buy) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_buy) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:.3f}".format(stock.avg_cost_usd) }}
+                                        {{ "{:.3f}".format(stock.avg_cost) }}
                                     {% else %}
                                         {{ "{:.3f}".format(stock.avg_cost) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end text-success">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_sell_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_sell) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_sell) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_fees_usd) }}
+                                        {{ "{:,.2f}".format(stock.total_fees) }}
                                     {% else %}
                                         {{ "{:,.2f}".format(stock.total_fees) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.realized_profit_usd) }}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
                                         <br>
                                         <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }})</small>
                                     {% else %}
@@ -383,13 +387,13 @@
                                 </td>
                                 <td class="text-end">-</td>
                                 <td class="text-end">-</td>
-                                <td class="text-end {{ 'text-success' if stock.total_profit > 0 else 'text-danger' }}">
+                                <td class="text-end {{ 'text-success' if stock.realized_profit > 0 else 'text-danger' }}">
                                     {% if market == 'USA' %}
-                                        {{ "{:,.2f}".format(stock.total_profit_usd) }}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
                                         <br>
-                                        <small class="text-muted">({{ "{:,.2f}".format(stock.total_profit) }})</small>
+                                        <small class="text-muted">({{ "{:,.2f}".format(stock.realized_profit) }})</small>
                                     {% else %}
-                                        {{ "{:,.2f}".format(stock.total_profit) }}
+                                        {{ "{:,.2f}".format(stock.realized_profit) }}
                                     {% endif %}
                                 </td>
                                 <td class="text-end {{ 'text-success' if stock.profit_rate > 0 else 'text-danger' }}">
@@ -448,11 +452,15 @@
                                 </td>
                                 <td class="text-end small">
                                     {% if trans.transaction_type == 'SELL' %}
-                                        <span class="{{ 'text-success' if trans.profit > 0 else 'text-danger' }}">
-                                            {{ "{:,.2f}".format(trans.profit) }}
-                                            <br>
-                                            <small>{{ "{:.1f}%".format(trans.profit_rate) }}</small>
-                                        </span>
+                                        {% if trans.get('profit') is not none %}
+                                            <span class="{{ 'text-success' if trans.get('profit', 0) > 0 else 'text-danger' }}">
+                                                {{ "{:,.2f}".format(trans.get('profit', 0)) }}
+                                                <br>
+                                                <small>{{ "{:.1f}%".format(trans.get('profit_rate', 0)) }}</small>
+                                            </span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
                                     {% else %}
                                         -
                                     {% endif %}
@@ -677,17 +685,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始更新市值
     updateMarketValue();
     
-    // 刷新按钮点击事件
+    // 添加强制刷新功能
+    function forceRefresh() {
+        window.location.reload(true);
+    }
+    
+    // 给刷新按钮添加强制刷新功能
     document.getElementById('refreshMarketValue').addEventListener('click', function() {
         const button = this;
         const originalHtml = button.innerHTML;
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
         
-        updateMarketValue().finally(() => {
-            button.disabled = false;
-            button.innerHTML = originalHtml;
-        });
+        // 强制刷新页面
+        window.location.reload(true);
     });
 });
 
