@@ -1,1449 +1,36 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, make_response
-from models import db, StockTransaction, TransactionDetail, ExchangeRate, Stock
-from routes.auth import login_required
-from datetime import datetime, timedelta
-from sqlalchemy import distinct
+from flask import Blueprint, request, session, jsonify
+from flask_login import login_required
+from models import db, Stock, StockTransaction, TransactionDetail, ExchangeRate
+from datetime import datetime
 from services.exchange_rate import ExchangeRateService
-from collections import defaultdict
-import yfinance as yf
-import requests
-from bs4 import BeautifulSoup
-from sqlalchemy import or_
+import logging
 
 stock_bp = Blueprint('stock', __name__)
+logger = logging.getLogger(__name__)
 
-exchange_rate_service = ExchangeRateService()
-
-def get_exchange_rate(currency, date=None):
-    """获取指定货币和日期的汇率"""
-    if currency == 'HKD':
-        return 1.0
-        
-    # 先从数据库查找
-    if date:
-        rate_record = ExchangeRate.find_by_date(currency, date)
-        if rate_record:
-            return rate_record.rate
-            
-    # 如果没有找到，从服务获取
-    return exchange_rate_service.get_exchange_rate(currency, date)
-
-def calculate_fifo_cost(buy_records, sell_quantity, sell_fees):
-    total_cost = 0
-    remaining_quantity = sell_quantity
-    used_records = []
-    
-    for record in buy_records:
-        if remaining_quantity <= 0:
-            break
-            
-        available_quantity = record['quantity']
-        unit_cost = record['price']
-        buy_fees = record['fees']
-        
-        used_quantity = min(remaining_quantity, available_quantity)
-        cost = (unit_cost * used_quantity) + (buy_fees * (used_quantity / available_quantity))
-        
-        used_records.append({
-            'quantity': used_quantity,
-            'price': unit_cost,
-            'fees': buy_fees * (used_quantity / available_quantity)
-        })
-        
-        total_cost += cost
-        remaining_quantity -= used_quantity
-    
-    # 计算卖出收入和利润
-    sell_amount = sell_quantity * record['price']
-    net_income = sell_amount - sell_fees
-    profit = net_income - total_cost
-    
-    return {
-        'total_cost': total_cost,
-        'profit': profit,
-        'profit_rate': (profit / total_cost * 100) if total_cost > 0 else 0,
-        'details': used_records
-    }
-
-def calculate_stats(transactions):
-    """计算交易统计数据
-    使用FIFO方法计算卖出交易的盈亏
-    对USA市场同时计算美元和港币金额
-    """
-    market_stats = {}
-    stock_stats = {}
-    
-    # 初始化市场统计
-    def init_market_stats():
-        return {
-            'transaction_count': 0,     # 交易笔数
-            'total_buy': 0,            # 买入总额(原始币种)
-            'total_buy_hkd': 0,        # 买入总额(港币)
-            'total_sell': 0,           # 卖出总额(原始币种)
-            'total_sell_hkd': 0,       # 卖出总额(港币)
-            'total_fees': 0,           # 总费用(原始币种)
-            'total_fees_hkd': 0,       # 总费用(港币)
-            'realized_profit': 0,      # 已实现盈亏(原始币种)
-            'realized_profit_hkd': 0,  # 已实现盈亏(港币)
-            'market_value': 0,         # 当前市值(原始币种)
-            'market_value_hkd': 0,     # 当前市值(港币)
-            'total_profit': 0,         # 总盈亏(原始币种)
-            'total_profit_hkd': 0,     # 总盈亏(港币)
-            'profit_rate': 0,          # 总盈亏比例
-            'exchange_rate': 1.0       # 当前汇率,港股为1.0
-        }
-    
-    # 初始化股票统计
-    def init_stock_stats():
-        return {
-            'market': '',              # 市场
-            'name': '',                # 公司名称
-            'current_quantity': 0,     # 当前持仓数量
-            'total_buy_quantity': 0,   # 总买入数量
-            'transaction_count': 0,    # 交易笔数
-            'total_buy': 0,           # 买入总额(原始币种)
-            'total_buy_hkd': 0,       # 买入总额(港币)
-            'total_sell': 0,          # 卖出总额(原始币种)
-            'total_sell_hkd': 0,      # 卖出总额(港币)
-            'total_fees': 0,          # 总费用(原始币种)
-            'total_fees_hkd': 0,      # 总费用(港币)
-            'avg_cost': 0,            # 平均成本(原始币种)
-            'realized_profit': 0,      # 已实现盈亏(原始币种)
-            'realized_profit_hkd': 0,  # 已实现盈亏(港币)
-            'market_value': 0,         # 当前市值(原始币种)
-            'market_value_hkd': 0,     # 当前市值(港币)
-            'total_profit': 0,         # 总盈亏(原始币种)
-            'total_profit_hkd': 0,     # 总盈亏(港币)
-            'profit_rate': 0,          # 总盈亏比例
-            'current_price': 0,        # 当前价格
-            'transactions': [],        # 交易记录
-            'fifo_queue': [],         # FIFO队列
-            'exchange_rate': 1.0       # 当前汇率,港股为1.0
-        }
-    
-    # 按时间顺序处理交易
-    for trans in sorted(transactions, key=lambda x: (x.transaction_date, x.transaction_code)):
-        market = trans.market
-        code = trans.stock_code
-        
-        # 初始化市场统计
-        if market not in market_stats:
-            market_stats[market] = init_market_stats()
-        
-        # 初始化股票统计
-        if code not in stock_stats:
-            stock_stats[code] = init_stock_stats()
-            stock_stats[code]['market'] = market
-            # 获取并设置公司名称
-            stock = Stock.query.filter_by(code=code, market=market).first()
-            if stock:
-                stock_stats[code]['name'] = stock.name
-        
-        stock = stock_stats[code]
-        
-        # 更新基本统计数据
-        stock['transaction_count'] += 1
-        market_stats[market]['transaction_count'] += 1
-        
-        # 更新费用(原始币种)
-        stock['total_fees'] += trans.total_fees
-        market_stats[market]['total_fees'] += trans.total_fees
-        
-        # 转换为港币
-        if market != 'HK':
-            fees_hkd = trans.total_fees * trans.exchange_rate
-            stock['total_fees_hkd'] += fees_hkd
-            market_stats[market]['total_fees_hkd'] += fees_hkd
-        else:
-            stock['total_fees_hkd'] += trans.total_fees
-            market_stats[market]['total_fees_hkd'] += trans.total_fees
-        
-        if trans.transaction_type == 'BUY':
-            # 买入交易处理
-            stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity  # 累加总买入数量
-            
-            # 更新买入总额(原始币种)
-            stock['total_buy'] += trans.total_amount
-            market_stats[market]['total_buy'] += trans.total_amount
-            
-            # 转换为港币
-            if market != 'HK':
-                buy_amount_hkd = trans.total_amount * trans.exchange_rate
-                stock['total_buy_hkd'] += buy_amount_hkd
-                market_stats[market]['total_buy_hkd'] += buy_amount_hkd
-            else:
-                stock['total_buy_hkd'] += trans.total_amount
-                market_stats[market]['total_buy_hkd'] += trans.total_amount
-            
-            # 计算平均成本(原始币种)
-            stock['avg_cost'] = stock['total_buy'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
-            
-            # 添加到FIFO队列
-            stock['fifo_queue'].append({
-                'quantity': trans.total_quantity,
-                'price': trans.total_amount / trans.total_quantity,  # 原始币种单位成本
-                'date': trans.transaction_date,
-                'exchange_rate': trans.exchange_rate,
-                'fees': trans.total_fees,
-                'total_cost': trans.total_amount + trans.total_fees  # 总成本（含费用）
-            })
-            
-            # 记录买入交易详情
-            trans_detail = {
-                'transaction_date': trans.transaction_date,
-                'transaction_type': trans.transaction_type,
-                'transaction_code': trans.transaction_code,
-                'total_quantity': trans.total_quantity,
-                'total_amount': trans.total_amount,
-                'total_amount_hkd': trans.total_amount_hkd,
-                'average_price': trans.average_price,
-                'total_fees': trans.total_fees,
-                'exchange_rate': trans.exchange_rate
-            }
-            
-            stock['transactions'].append(trans_detail)
-            
-        else:  # SELL
-            # 卖出交易处理
-            stock['current_quantity'] -= trans.total_quantity
-            
-            # 更新卖出总额(原始币种)
-            stock['total_sell'] += trans.total_amount
-            market_stats[market]['total_sell'] += trans.total_amount
-            
-            # 转换为港币
-            if market != 'HK':
-                sell_amount_hkd = trans.total_amount * trans.exchange_rate
-                stock['total_sell_hkd'] += sell_amount_hkd
-                market_stats[market]['total_sell_hkd'] += sell_amount_hkd
-            else:
-                stock['total_sell_hkd'] += trans.total_amount
-                market_stats[market]['total_sell_hkd'] += trans.total_amount
-            
-            # 计算FIFO成本和盈亏
-            remaining_quantity = trans.total_quantity
-            total_cost = 0  # 原始币种的总成本（含买入费用）
-            fifo_cost_details = []
-            
-            # 确保按时间顺序处理买入记录
-            stock['fifo_queue'].sort(key=lambda x: x['date'])
-            
-            while remaining_quantity > 0 and stock['fifo_queue']:
-                buy_record = stock['fifo_queue'][0]
-                used_quantity = min(remaining_quantity, buy_record['quantity'])
-                
-                # 计算这部分股票的成本（包含买入费用）
-                cost_ratio = used_quantity / buy_record['quantity']
-                unit_cost = buy_record['price']  # 原始币种单位成本
-                buy_fees = buy_record['fees'] * cost_ratio  # 分摊的买入费用
-                
-                cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
-                total_cost += cost  # 累加总成本
-                
-                # 记录FIFO成本明细
-                fifo_cost_details.append({
-                    'date': buy_record['date'],
-                    'quantity': used_quantity,
-                    'price': unit_cost,
-                    'cost': cost,
-                    'exchange_rate': buy_record['exchange_rate'],
-                    'fees': buy_fees
-                })
-                
-                # 更新或移除买入记录
-                buy_record['quantity'] -= used_quantity
-                if buy_record['quantity'] == 0:
-                    stock['fifo_queue'].pop(0)
-                remaining_quantity -= used_quantity
-            
-            # 计算利润（原始币种）
-            sell_amount = trans.total_amount
-            sell_fees = trans.total_fees
-            net_income = sell_amount - sell_fees
-            profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
-            
-            # 计算利润率
-            profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
-            
-            # 记录卖出交易详情
-            trans_detail = {
-                'transaction_date': trans.transaction_date,
-                'transaction_type': trans.transaction_type,
-                'transaction_code': trans.transaction_code,
-                'total_quantity': trans.total_quantity,
-                'total_amount': trans.total_amount,
-                'total_amount_hkd': trans.total_amount_hkd,
-                'average_price': trans.average_price,
-                'total_fees': trans.total_fees,
-                'exchange_rate': trans.exchange_rate,
-                'fifo_cost_details': fifo_cost_details,
-                'profit': profit,  # 使用实际盈亏值
-                'profit_rate': profit_rate,  # 使用实际盈亏率
-                'total_cost': total_cost  # 添加总成本信息用于验证
-            }
-            
-            stock['transactions'].append(trans_detail)
-            
-            # 更新已实现盈亏(原始币种)
-            stock['realized_profit'] += profit  # 累加实际的盈亏值
-            market_stats[market]['realized_profit'] += profit  # 累加实际的盈亏值
-            
-            # 转换为港币
-            if market != 'HK':
-                profit_hkd = profit * trans.exchange_rate
-                stock['realized_profit_hkd'] += profit_hkd
-                market_stats[market]['realized_profit_hkd'] += profit_hkd
-            else:
-                stock['realized_profit_hkd'] += profit
-                market_stats[market]['realized_profit_hkd'] += profit
-    
-    # 计算当前市值和总盈亏
-    for code, stock in stock_stats.items():
-        if stock['current_quantity'] > 0:
-            # 获取当前价格
-            current_price = get_stock_price(code, stock['market'])
-            if current_price:
-                stock['current_price'] = current_price
-                
-                # 计算市值(原始币种)
-                market_value = stock['current_price'] * stock['current_quantity']
-                stock['market_value'] = market_value
-                market_stats[stock['market']]['market_value'] += market_value
-                
-                # 计算当前持仓的买入费用分摊
-                # 使用FIFO队列中剩余的记录计算总成本和费用
-                total_cost = 0
-                total_fees = 0
-                for buy_record in stock['fifo_queue']:
-                    total_cost += buy_record['price'] * buy_record['quantity']
-                    total_fees += buy_record['fees']
-                
-                # 计算未实现盈亏(原始币种)
-                current_position_cost = total_cost + total_fees
-                unrealized_profit = market_value - current_position_cost
-                
-                # 总盈亏(原始币种) = 已实现盈亏 + 未实现盈亏
-                stock['total_profit'] = stock['realized_profit'] + unrealized_profit
-                
-                # 转换为港币(如果不是港股)
-                if stock['market'] != 'HK':
-                    exchange_rate = get_exchange_rate('USD', datetime.now().strftime('%Y-%m-%d'))
-                    if exchange_rate:
-                        stock['exchange_rate'] = exchange_rate
-                        market_stats[stock['market']]['exchange_rate'] = exchange_rate
-                        
-                        stock['market_value_hkd'] = market_value * exchange_rate
-                        market_stats[stock['market']]['market_value_hkd'] += market_value * exchange_rate
-                        
-                        stock['total_profit_hkd'] = stock['total_profit'] * exchange_rate
-                else:
-                    stock['market_value_hkd'] = market_value
-                    market_stats[stock['market']]['market_value_hkd'] += market_value
-                    stock['total_profit_hkd'] = stock['total_profit']
-                
-                # 计算盈亏率
-                if stock['total_buy'] > 0:
-                    stock['profit_rate'] = (stock['total_profit'] / stock['total_buy']) * 100
-            else:
-                # 已清仓股票：总盈亏等于已实现盈亏
-                stock['total_profit'] = stock['realized_profit']
-                stock['total_profit_hkd'] = stock['realized_profit_hkd']
-                
-                # 盈亏率 = 已实现盈亏 / 总买入金额
-                if stock['total_buy'] > 0:
-                    stock['profit_rate'] = (stock['realized_profit'] / stock['total_buy']) * 100
-                
-                # 已清仓股票的市值为0
-                stock['market_value'] = 0
-                stock['market_value_hkd'] = 0
-                stock['current_price'] = 0
-        else:
-            # 已清仓股票：总盈亏等于已实现盈亏
-            stock['total_profit'] = stock['realized_profit']
-            stock['total_profit_hkd'] = stock['realized_profit_hkd']
-            
-            # 盈亏率 = 已实现盈亏 / 总买入金额
-            if stock['total_buy'] > 0:
-                stock['profit_rate'] = (stock['realized_profit'] / stock['total_buy']) * 100
-            
-            # 已清仓股票的市值为0
-            stock['market_value'] = 0
-            stock['market_value_hkd'] = 0
-            stock['current_price'] = 0
-    
-    # 计算市场级别的总盈亏和盈亏率
-    for market, stats in market_stats.items():
-        # 总盈亏包括已实现盈亏和未实现盈亏
-        stats['total_profit'] = stats['realized_profit']
-        stats['total_profit_hkd'] = stats['realized_profit_hkd']
-        
-        # 计算盈亏率
-        if stats['total_buy'] > 0:
-            stats['profit_rate'] = (stats['realized_profit'] / stats['total_buy']) * 100
-    
-    # 将股票分为持仓和已清仓两组
-    holding_stocks = {}
-    closed_stocks = {}
-    
-    for code, stock in stock_stats.items():
-        if stock['current_quantity'] > 0:
-            holding_stocks[code] = stock
-        else:
-            closed_stocks[code] = stock
-    
-    # 分别对持仓和已清仓股票按最新交易日期和系统时间排序
-    def get_latest_transaction_info(transactions):
-        if not transactions:
-            return (datetime.min, datetime.min)
-        latest = max(transactions, key=lambda x: (x['transaction_date'], x.get('created_at', datetime.min)))
-        return (latest['transaction_date'], latest.get('created_at', datetime.min))
-    
-    sorted_holding_stocks = dict(sorted(
-        holding_stocks.items(),
-        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
-        reverse=True
-    ))
-    
-    sorted_closed_stocks = dict(sorted(
-        closed_stocks.items(),
-        key=lambda x: get_latest_transaction_info(x[1]['transactions']),
-        reverse=True
-    ))
-    
-    # 合并排序后的结果
-    sorted_stock_stats = {**sorted_holding_stocks, **sorted_closed_stocks}
-    
-    # 对每个股票的交易记录按日期和交易编号排序
-    for code in sorted_stock_stats:
-        sorted_stock_stats[code]['transactions'].sort(
-            key=lambda x: (x['transaction_date'], x['transaction_code']),
-            reverse=True
-        )
-    
-    return market_stats, sorted_stock_stats
-
-def get_holding_stocks(user_id):
-    """获取用户的持仓股票
-    Returns:
-        List[Tuple]: 返回元组列表，每个元组包含 (code, market, quantity)
-    """
-    # 使用calculate_stats函数获取持仓信息
-    transactions = StockTransaction.query.filter_by(user_id=user_id).all()
-    market_stats, stock_stats = calculate_stats(transactions)
-    
-    # 提取持仓股票
-    holding_stocks = []
-    for code, stock in stock_stats.items():
-        if stock['current_quantity'] > 0:
-            holding_stocks.append((
-                code,
-                stock['market'],
-                stock['current_quantity']
-            ))
-    
-    return holding_stocks
-
-def get_stock_symbol(code, market):
-    """转换股票代码为 Yahoo Finance 格式"""
-    if market == 'HK':
-        return f"{code}.HK"
-    else:  # USA
-        return code
-
-def get_stock_price(code, market):
-    """获取股票当前价格
-    Args:
-        code (str): 股票代码
-        market (str): 市场代码 (HK/USA)
-    Returns:
-        float: 当前价格，如果获取失败则返回None
-    """
-    try:
-        symbol = get_stock_symbol(code, market)
-        stock = yf.Ticker(symbol)
-        info = stock.info
-        
-        if 'regularMarketPrice' not in info or info['regularMarketPrice'] is None:
-            return None
-            
-        return info['regularMarketPrice']
-    except Exception as e:
-        print(f"获取 {code} 价格失败: {str(e)}")
-        return None
-
-def get_multiple_quotes(stock_list):
-    """批量获取多个股票的实时价格"""
-    result = {}
-    for market, code in stock_list:
-        quote = get_stock_price(code, market)
-        if quote:
-            result[code] = quote
-    return result
-
-@stock_bp.route('/api/portfolio/market-value')
-@login_required
-def get_portfolio_market_value():
-    try:
-        # 获取持仓股票列表
-        holdings = get_holding_stocks(session['user_id'])
-        result = []
-        
-        # 遍历持仓股票
-        for code, market, quantity in holdings:
-            try:
-                # 获取当前价格
-                current_price = get_stock_price(code, market)
-                result.append({
-                    'code': code,
-                    'market': market,
-                    'current_price': current_price
-                })
-            except Exception as e:
-                print(f"获取 {code} 价格失败: {str(e)}")
-                result.append({
-                    'code': code,
-                    'market': market,
-                    'current_price': None
-                })
-        
-        return jsonify({
-            'success': True,
-            'data': result
-        })
-        
-    except Exception as e:
-        print(f"获取股票价格失败: {str(e)}")
-        return jsonify({'success': False, 'error': '获取股票价格失败'})
-
-@stock_bp.route('/stock/codes')
-@login_required
-def get_stock_codes():
-    # 获取当前用户的所有不重复的股票代码
-    user_id = session.get('user_id')
-    codes = db.session.query(StockTransaction.stock_code)\
-        .filter_by(user_id=user_id)\
-        .distinct()\
-        .order_by(StockTransaction.stock_code)\
-        .all()
-    return jsonify([code[0] for code in codes])
-
-@stock_bp.route('/stock/list')
-@login_required
-def list():
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    market = request.args.get('market')
-    stock_codes = request.args.getlist('stock_codes')
-    page = request.args.get('page', 1, type=int)
-    per_page = 15
-    
-    query = StockTransaction.query.filter_by(user_id=session['user_id'])
-    
-    if start_date:
-        query = query.filter(StockTransaction.transaction_date >= start_date)
-    if end_date:
-        query = query.filter(StockTransaction.transaction_date <= end_date)
-    if market:
-        query = query.filter(StockTransaction.market == market)
-    if stock_codes:
-        query = query.filter(StockTransaction.stock_code.in_(stock_codes))
-    
-    # 添加分页
-    pagination = query.order_by(StockTransaction.transaction_date.desc(), 
-                              StockTransaction.created_at.desc()).paginate(
-        page=page, 
-        per_page=per_page,
-        error_out=False
-    )
-    transactions = pagination.items
-    
-    # 获取所有股票代码供查询使用
-    stock_codes_query = db.session.query(StockTransaction.stock_code, StockTransaction.market)\
-        .filter_by(user_id=session['user_id'])
-    
-    if market:
-        stock_codes_query = stock_codes_query.filter(StockTransaction.market == market)
-    
-    all_stock_codes = stock_codes_query.distinct().order_by(StockTransaction.stock_code).all()
-    
-    # 获取所有股票的完整信息
-    all_stocks = []
-    for code, market in all_stock_codes:
-        stock = Stock.query.filter_by(code=code, market=market).first()
-        if stock:
-            all_stocks.append({
-                'code': stock.code,
-                'market': stock.market,
-                'name': stock.name
-            })
-        else:
-            all_stocks.append({
-                'code': code,
-                'market': market,
-                'name': ''
-            })
-    
-    # 获取当前页面显示的股票名称
-    stock_codes = [t.stock_code for t in transactions]
-    stock_codes = sorted(set(stock_codes))
-    stocks = Stock.query.filter(Stock.code.in_(stock_codes)).all()
-    stock_names = {s.code: s.name for s in stocks}
-    
-    return render_template('stock/list.html', 
-                         transactions=transactions,
-                         pagination=pagination,
-                         all_stocks=all_stocks,
-                         all_stock_codes=[s['code'] for s in all_stocks],
-                         selected_stock_codes=stock_codes,
-                         stock_names=stock_names)
-
-@stock_bp.route('/stock/add', methods=['GET', 'POST'])
-@login_required
-def add():
-    if request.method == 'POST':
-        try:
-            # 获取基本信息
-            transaction_date = datetime.strptime(request.form.get('transaction_date'), '%Y-%m-%d')
-            stock_code = request.form.get('stock_code')
-            market = request.form.get('market')
-            transaction_code = request.form.get('transaction_code')
-            transaction_type = request.form.get('transaction_type')
-            
-            # 检查交易编号是否已存在
-            existing_transaction = StockTransaction.query.filter_by(
-                user_id=session['user_id'],
-                transaction_code=transaction_code
-            ).first()
-            if existing_transaction:
-                return jsonify({
-                    'success': False,
-                    'error': '交易编号已存在，请使用其他编号'
-                })
-            
-            # 如果是非港股市场，获取汇率
-            exchange_rate = None
-            if market != 'HK':
-                currency = 'USD'  # 统一使用USD作为货币代码
-                exchange_rate = ensure_exchange_rate_exists(currency, transaction_date.strftime('%Y-%m-%d'))
-                if exchange_rate is None:
-                    return jsonify({
-                        'success': False,
-                        'error': f'无法获取 {transaction_date.strftime("%Y-%m-%d")} 的{currency}汇率，请稍后重试'
-                    })
-            
-            # 处理费用字段，确保空值转换为0
-            def get_fee(field_name):
-                value = request.form.get(field_name, '0')
-                return float(value) if value.strip() else 0.0
-            
-            # 获取费用信息
-            broker_fee = get_fee('broker_fee')
-            transaction_levy = get_fee('transaction_levy')
-            stamp_duty = get_fee('stamp_duty')
-            trading_fee = get_fee('trading_fee')
-            deposit_fee = get_fee('deposit_fee')
-            
-            # 获取成交明细
-            quantities = request.form.getlist('quantities[]')
-            prices = request.form.getlist('prices[]')
-            
-            if not quantities or not prices:
-                return jsonify({
-                    'success': False,
-                    'error': '请至少添加一条成交记录'
-                })
-            
-            # 创建交易记录
-            transaction = StockTransaction(
-                user_id=session['user_id'],
-                transaction_date=transaction_date,
-                stock_code=stock_code,
-                market=market,
-                transaction_code=transaction_code,
-                transaction_type=transaction_type,
-                exchange_rate=exchange_rate,
-                broker_fee=broker_fee,
-                transaction_levy=transaction_levy,
-                stamp_duty=stamp_duty,
-                trading_fee=trading_fee,
-                deposit_fee=deposit_fee
-            )
-            
-            # 添加成交明细
-            for quantity, price in zip(quantities, prices):
-                if not quantity or not price:
-                    continue
-                detail = TransactionDetail(
-                    quantity=int(quantity),
-                    price=float(price)
-                )
-                transaction.details.append(detail)
-            
-            if not transaction.details:
-                return jsonify({
-                    'success': False,
-                    'error': '请至少添加一条有效的成交记录'
-                })
-            
-            db.session.add(transaction)
-            db.session.commit()
-            
-            action = request.form.get('action')
-            if action == 'save_and_add':
-                return jsonify({
-                    'success': True,
-                    'message': '保存成功',
-                    'redirect': url_for('stock.add')
-                })
-            else:
-                return jsonify({
-                    'success': True,
-                    'message': '保存成功',
-                    'redirect': url_for('stock.list')
-                })
-                
-        except ValueError as e:
-            db.session.rollback()
-            return jsonify({
-                'success': False,
-                'error': f'输入数据格式错误: {str(e)}'
-            })
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({
-                'success': False,
-                'error': f'保存失败: {str(e)}'
-            })
-    
-    return render_template('stock/add.html')
-
-@stock_bp.route('/stock/edit/<int:id>', methods=['GET', 'POST'])
-@login_required
-def edit(id):
-    transaction = StockTransaction.query.get_or_404(id)
-    if transaction.user_id != session['user_id']:
-        flash('无权限编辑此记录')
-        return redirect(url_for('stock.list'))
-    
-    if request.method == 'POST':
-        try:
-            # 获取表单数据
-            market = request.form['market']
-            transaction_date = request.form['transaction_date']
-            
-            # 如果是非港股市场，获取汇率
-            exchange_rate = None
-            if market != 'HK':
-                currency = 'USD'  # 统一使用USD作为货币代码
-                exchange_rate = ensure_exchange_rate_exists(currency, transaction_date)
-                if exchange_rate is None:
-                    flash(f'无法获取 {transaction_date} 的{currency}汇率，请稍后重试')
-                    return redirect(url_for('stock.edit', id=id))
-            
-            # 更新主记录
-            transaction.transaction_code = request.form['transaction_code']
-            transaction.stock_code = request.form['stock_code']
-            transaction.market = market
-            transaction.transaction_type = request.form['transaction_type']
-            transaction.transaction_date = datetime.strptime(transaction_date, '%Y-%m-%d')
-            transaction.exchange_rate = exchange_rate
-            transaction.broker_fee = float(request.form.get('broker_fee', 0))
-            transaction.stamp_duty = float(request.form.get('stamp_duty', 0))
-            transaction.transaction_levy = float(request.form.get('transaction_levy', 0))
-            transaction.trading_fee = float(request.form.get('trading_fee', 0))
-            transaction.clearing_fee = float(request.form.get('clearing_fee', 0))
-            transaction.deposit_fee = float(request.form.get('deposit_fee', 0))
-            
-            # 删除旧的明细记录
-            TransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
-            
-            # 添加新的明细记录
-            quantities = request.form.getlist('quantities[]')
-            prices = request.form.getlist('prices[]')
-            
-            for quantity, price in zip(quantities, prices):
-                if quantity and price:  # 确保数量和价格都有值
-                    detail = TransactionDetail(
-                        transaction_id=transaction.id,
-                        quantity=int(quantity),
-                        price=float(price)
-                    )
-                    db.session.add(detail)
-            
-            db.session.commit()
-            flash('交易记录更新成功')
-            return redirect(url_for('stock.list'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'更新失败：{str(e)}')
-            return redirect(url_for('stock.edit', id=id))
-    
-    return render_template('stock/edit.html', transaction=transaction)
-
-@stock_bp.route('/stock/delete/<int:id>')
-@login_required
-def delete(id):
-    transaction = StockTransaction.query.get_or_404(id)
-    if transaction.user_id != session['user_id']:
-        flash('无权限删除此记录')
-        return redirect(url_for('stock.list'))
-    
-    try:
-        # 删除明细记录
-        TransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
-        # 删除主记录
-        db.session.delete(transaction)
-        db.session.commit()
-        flash('交易记录删除成功')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'删除失败：{str(e)}')
-    
-    return redirect(url_for('stock.list'))
-
-@stock_bp.route('/api/exchange_rates')
-@login_required
-def api_exchange_rate_list():
-    """汇率列表页面"""
-    # 获取查询参数
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 15, type=int)
-    start_date = request.args.get('start_date', '')
-    end_date = request.args.get('end_date', '')
-    
-    # 构建查询
-    query = ExchangeRate.query
-    
-    # 添加日期范围过滤
-    if start_date:
-        query = query.filter(ExchangeRate.rate_date >= datetime.strptime(start_date, '%Y-%m-%d').date())
-    if end_date:
-        query = query.filter(ExchangeRate.rate_date <= datetime.strptime(end_date, '%Y-%m-%d').date())
-    
-    # 按日期降序排序并分页
-    rates = query.order_by(ExchangeRate.rate_date.desc()).paginate(
-        page=page, 
-        per_page=per_page,
-        error_out=False
-    )
-    
-    return jsonify({
-        'success': True,
-        'data': {
-            'items': [rate.to_dict() for rate in rates.items],
-            'total': rates.total,
-            'pages': rates.pages,
-            'current_page': rates.page
-        }
-    })
-
-@stock_bp.route('/exchange_rates/edit/<int:id>', methods=['POST'])
-@login_required
-def edit_exchange_rate(id):
-    """修改汇率"""
-    try:
-        new_rate = float(request.form.get('rate'))
-        
-        # 获取汇率记录
-        rate_record = ExchangeRate.query.get_or_404(id)
-        old_rate = rate_record.rate
-        
-        # 更新汇率
-        rate_record.rate = new_rate
-        rate_record.source = 'MANUAL'  # 标记为手动修改
-        
-        # 更新使用此汇率的所有交易记录
-        transactions = StockTransaction.query.filter(
-            StockTransaction.transaction_date >= rate_record.rate_date,
-            StockTransaction.transaction_date < rate_record.rate_date + timedelta(days=1),
-            StockTransaction.market != 'HK'
-        ).all()
-        
-        for transaction in transactions:
-            if transaction.exchange_rate == old_rate:
-                transaction.exchange_rate = new_rate
-        
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@stock_bp.route('/exchange_rates/add', methods=['POST'])
-@login_required
-def add_exchange_rate():
-    """手动添加汇率"""
-    try:
-        date_str = request.form.get('date')
-        currency = request.form.get('currency')
-        rate = float(request.form.get('rate'))
-        
-        # 检查是否已存在
-        rate_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        existing = ExchangeRate.query.filter_by(
-            currency=currency,
-            rate_date=rate_date
-        ).first()
-        
-        if existing:
-            return jsonify({
-                'success': False,
-                'error': f'{date_str} 的 {currency} 汇率记录已存在'
-            })
-        
-        # 创建新记录
-        new_rate = ExchangeRate(
-            currency=currency,
-            rate_date=rate_date,
-            rate=rate,
-            source='MANUAL'  # 设置来源为手动添加
-        )
-        db.session.add(new_rate)
-        db.session.commit()
-        
-        flash('汇率添加成功')
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@stock_bp.route('/exchange_rates/fetch_missing', methods=['POST'])
-@login_required
-def fetch_missing_rates():
-    """自动抓取缺失汇率"""
-    try:
-        # 更新所有临时汇率记录
-        stats = update_temporary_rates()
-        
-        if stats['updated'] > 0:
-            flash(f"成功更新 {stats['updated']} 条汇率记录")
-        elif stats['failed'] > 0:
-            flash(f"更新失败：{stats['failed']} 条记录更新失败", 'error')
-        else:
-            flash("没有需要更新的临时汇率记录")
-            
-        return jsonify({
-            'success': True,
-            'stats': stats
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@stock_bp.route('/stock/stats')
-@login_required
-def stats():
-    # 添加缓存控制头，确保不使用任何缓存
-    response = make_response()
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    
-    # 获取查询参数，但不设置默认值，允许为空
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    market = request.args.get('market')
-    stock_codes = request.args.getlist('stock_codes')
-    
-    # 强制从数据库读取最新数据
-    db.session.expire_all()  # 使所有已加载的对象过期
-    db.session.commit()      # 提交任何未提交的更改
-    
-    # 只过滤用户ID
-    query = StockTransaction.query.filter_by(user_id=session['user_id'])
-    
-    # 仅当有查询参数时才应用过滤条件
-    if start_date:
-        query = query.filter(StockTransaction.transaction_date >= start_date)
-    if end_date:
-        query = query.filter(StockTransaction.transaction_date <= end_date)
-    if market:
-        query = query.filter(StockTransaction.market == market)
-    if stock_codes:
-        query = query.filter(StockTransaction.stock_code.in_(stock_codes))
-    
-    # 强制重新执行查询，不使用缓存
-    transactions = query.with_for_update().all()
-    
-    # 获取所有股票代码供查询使用，同样强制重新查询
-    stock_codes_query = db.session.query(StockTransaction.stock_code, StockTransaction.market)\
-        .filter_by(user_id=session['user_id'])
-    
-    if market:
-        stock_codes_query = stock_codes_query.filter(StockTransaction.market == market)
-    
-    stock_codes_query = stock_codes_query.distinct().with_for_update().all()
-    
-    # 获取完整的股票信息
-    all_stocks = []
-    for code, market in stock_codes_query:
-        stock = Stock.query.filter_by(code=code, market=market).first()
-        if stock:
-            all_stocks.append({
-                'code': stock.code,
-                'market': stock.market,
-                'name': stock.name
-            })
-        else:
-            all_stocks.append({
-                'code': code,
-                'market': market,
-                'name': ''
-            })
-    
-    # 计算统计数据
-    market_stats, stock_stats = calculate_stats(transactions)
-    
-    # 渲染模板
-    template = render_template('stock/stats.html',
-                             market_stats=market_stats,
-                             stock_stats=stock_stats,
-                             all_stocks=all_stocks,
-                             selected_stock_codes=stock_codes)
-    
-    # 设置响应内容
-    response.set_data(template)
-    return response
-
-@stock_bp.route('/api/stocks')
-@login_required
-def stocks():
-    # 获取查询参数
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
-    market = request.args.get('market', '')
-    search = request.args.get('search', '')
-    selected_stock_codes = request.args.getlist('stock_codes')
-
-    # 构建查询
-    query = Stock.query
-    if market:
-        query = query.filter_by(market=market)
-    if search:
-        query = query.filter(
-            or_(
-                Stock.code.ilike(f'%{search}%'),
-                Stock.name.ilike(f'%{search}%')
-            )
-        )
-
-    # 获取分页数据
-    pagination = query.order_by(Stock.market.asc(), Stock.code.asc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
-
-    # 获取所有股票用于选择器
-    all_stocks = [
-        {
-            'code': stock.code,
-            'market': stock.market,
-            'name': stock.name
-        }
-        for stock in Stock.query.order_by(Stock.market.asc(), Stock.code.asc()).all()
-    ]
-
-    return render_template('stock/stocks.html',
-                          pagination=pagination,
-                          market=market,
-                          all_stocks=all_stocks,
-                          selected_stock_codes=selected_stock_codes)
-
-@stock_bp.route('/stocks/add', methods=['POST'])
-@login_required
-def add_stock():
-    """添加股票"""
-    try:
-        code = request.form.get('code')
-        market = request.form.get('market')
-        name = request.form.get('name')
-        full_name = request.form.get('full_name')
-        
-        # 检查是否已存在
-        existing = Stock.query.filter_by(code=code, market=market).first()
-        if existing:
-            return jsonify({
-                'success': False,
-                'error': f'{market} 市场的股票代码 {code} 已存在'
-            })
-        
-        # 创建新记录
-        stock = Stock(
-            code=code,
-            market=market,
-            name=name,
-            full_name=full_name
-        )
-        db.session.add(stock)
-        db.session.commit()
-        
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@stock_bp.route('/stocks/edit/<int:id>', methods=['POST'])
-@login_required
-def edit_stock(id):
-    """编辑股票"""
-    try:
-        stock = Stock.query.get_or_404(id)
-        
-        # 更新信息
-        stock.name = request.form.get('name')
-        stock.full_name = request.form.get('full_name')
-        
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@stock_bp.route('/stocks/delete/<int:id>', methods=['POST'])
-@login_required
-def delete_stock(id):
-    """删除股票"""
-    try:
-        stock = Stock.query.get_or_404(id)
-        
-        # 检查是否有关联的交易记录
-        has_transactions = StockTransaction.query.filter_by(
-            stock_code=stock.code,
-            market=stock.market
-        ).first() is not None
-        
-        if has_transactions:
-            return jsonify({
-                'success': False,
-                'error': '该股票存在交易记录，无法删除'
-            })
-        
-        db.session.delete(stock)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@stock_bp.route('/api/stock/info')
-@login_required
-def get_stock_info():
-    """获取股票信息"""
-    market = request.args.get('market')
-    code = request.args.get('code')
-    
-    if not market or not code:
-        return jsonify({'success': False, 'error': '缺少必要参数'})
-    
-    try:
-        # 设置请求头
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
-        }
-
-        # 处理股票代码格式
-        if market == 'HK':
-            # 如果是港股，统一处理前导零
-            code = code.lstrip('0')  # 先去除所有前导零
-            code = code.zfill(4)  # 然后补充到4位
-            url = f'https://www.google.com/finance/quote/{code}:HKG'
-            google_code = f"{code}:HKG"
-        else:  # USA
-            google_code = None
-            # 先尝试NASDAQ
-            url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
-            try:
-                print(f"尝试NASDAQ: {url}")
-                response = requests.get(url, headers=headers, timeout=10)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                price_div = soup.find('div', {'data-last-price': True})
-                
-                if price_div and price_div.get('data-last-price'):
-                    google_code = f"{code}:NASDAQ"
-                else:
-                    # 如果在NASDAQ找不到，尝试NYSE
-                    url = f'https://www.google.com/finance/quote/{code}:NYSE'
-                    print(f"尝试NYSE: {url}")
-                    response = requests.get(url, headers=headers, timeout=10)
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    price_div = soup.find('div', {'data-last-price': True})
-                    if price_div and price_div.get('data-last-price'):
-                        google_code = f"{code}:NYSE"
-                    else:
-                        raise ValueError(f"股票 {code} 在NASDAQ和NYSE均未找到价格信息")
-            except Exception as e:
-                print(f"NASDAQ查询失败，尝试NYSE: {url}")
-                url = f'https://www.google.com/finance/quote/{code}:NYSE'
-                response = requests.get(url, headers=headers, timeout=10)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                price_div = soup.find('div', {'data-last-price': True})
-                if price_div and price_div.get('data-last-price'):
-                    google_code = f"{code}:NYSE"
-                else:
-                    raise ValueError(f"股票 {code} 在NYSE未找到价格信息")
-        
-        print(f"最终访问URL: {url}")
-        
-        # 获取股票名称 - 查找包含中文名称的元素
-        name_div = soup.find('div', {'class': 'zzDege'})
-        name = name_div.text.strip() if name_div else None
-        
-        if not name:
-            # 如果无法从Google获取名称，尝试从yfinance获取
-            yf_code = f"{code}.HK" if market == 'HK' else code
-            stock = yf.Ticker(yf_code)
-            info = stock.info
-            name = info.get('longName', None)
-        
-        # 获取股票价格
-        price = float(price_div.get('data-last-price')) if price_div and price_div.get('data-last-price') else None
-
-        print(f"获取到股票信息: name={name}, price={price}, google_code={google_code}")
-
-        # 保存或更新股票信息到数据库
-        stock = Stock.query.filter_by(code=code, market=market).first()
-        if stock:
-            if name:
-                stock.name = name
-            if google_code:
-                stock.full_name = google_code
-            stock.updated_at = datetime.now()
-            db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'code': code,
-                'market': market,
-                'name': name,
-                'google_code': google_code,
-                'current_price': price
-            }
-        })
-        
-    except Exception as e:
-        print(f"获取股票信息失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': '获取股票信息失败，请检查输入的代码是否正确'
-        })
-
-@stock_bp.route('/api/stock/prices')
-@login_required
-def get_stock_prices():
-    """获取所有股票的实时价格"""
-    try:
-        stocks = Stock.query.all()
-        result = []
-        
-        for stock in stocks:
-            try:
-                # 使用 get_stock_price 函数获取价格（该函数已经实现了谷歌金融的抓取逻辑）
-                quote = get_stock_price(stock.code, stock.market)
-                
-                if quote and quote.get('price') is not None:
-                    result.append({
-                        'code': stock.code,
-                        'market': stock.market,
-                        'current_price': quote['price']
-                    })
-                else:
-                    print(f"无法获取 {stock.code} 的价格信息")
-                    result.append({
-                        'code': stock.code,
-                        'market': stock.market,
-                        'current_price': None
-                    })
-            except Exception as e:
-                print(f"获取 {stock.code} 价格失败: {str(e)}")
-                result.append({
-                    'code': stock.code,
-                    'market': stock.market,
-                    'current_price': None
-                })
-        
-        return jsonify({
-            'success': True,
-            'data': result
-        })
-    except Exception as e:
-        print(f"获取股票价格失败: {str(e)}")
-        return jsonify({'success': False, 'error': '获取股票价格失败'})
-
-@stock_bp.route('/api/stock/list')
-@login_required
-def get_stock_list():
-    """获取股票列表，支持按市场和关键词搜索"""
-    try:
-        market = request.args.get('market', '')
-        keyword = request.args.get('term', '')
-        
-        query = Stock.query
-        
-        if market:
-            query = query.filter(Stock.market == market)
-            
-        if keyword:
-            keyword = f"%{keyword}%"
-            query = query.filter(
-                db.or_(
-                    Stock.code.like(keyword),
-                    Stock.name.like(keyword)
-                )
-            )
-            
-        stocks = query.order_by(Stock.market.asc(), Stock.code.asc()).all()
-        
-        return jsonify({
-            'success': True,
-            'data': [{
-                'code': stock.code,
-                'market': stock.market,
-                'name': stock.name
-            } for stock in stocks]
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@stock_bp.route('/api/stock/search')
-@login_required
-def search_stocks():
-    """搜索股票"""
-    try:
-        keyword = request.args.get('keyword', '')
-        if not keyword:
-            return jsonify({
-                'success': True,
-                'data': []
-            })
-        
-        # 添加通配符
-        keyword = f"%{keyword}%"
-        
-        # 查询股票
-        stocks = Stock.query.filter(
-            or_(
-                Stock.code.like(keyword),
-                Stock.name.like(keyword)
-            )
-        ).all()
-        
-        # 格式化结果
-        results = [{
-            'code': stock.code,
-            'market': stock.market,
-            'name': stock.name
-        } for stock in stocks]
-        
-        return jsonify({
-            'success': True,
-            'data': results
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@stock_bp.route('/stock/check_transaction_code')
-@login_required
-def check_transaction_code():
-    """检查交易编号是否已存在"""
-    code = request.args.get('code')
-    if not code:
-        return jsonify({'exists': False})
-    
-    # 检查当前用户是否已有该交易编号的记录
-    exists = StockTransaction.query.filter_by(
-        user_id=session['user_id'],
-        transaction_code=code
-    ).first() is not None
-    
-    return jsonify({'exists': exists})
-
-@stock_bp.route('/api/profit')
-@login_required
-def get_profit_stats():
-    """获取盈利统计数据的API"""
-    try:
-        # 获取查询参数
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        market = request.args.get('market')
-        stock_codes = request.args.getlist('stock_codes')
-        
-        # 构建查询
-        query = StockTransaction.query.filter_by(user_id=session['user_id'])
-        
-        if start_date:
-            query = query.filter(StockTransaction.transaction_date >= start_date)
-        if end_date:
-            query = query.filter(StockTransaction.transaction_date <= end_date)
-        if market:
-            query = query.filter_by(market=market)
-        if stock_codes:
-            query = query.filter(StockTransaction.stock_code.in_(stock_codes))
-            
-        # 获取交易记录
-        transactions = query.order_by(StockTransaction.transaction_date).all()
-        
-        # 计算统计数据
-        market_stats, stock_stats = calculate_stats(transactions)
-        
-        # 获取所有相关的股票信息
-        stock_codes_query = db.session.query(
-            StockTransaction.stock_code,
-            StockTransaction.market
-        ).filter_by(user_id=session['user_id']).distinct()
-        
-        all_stocks = []
-        for code, market in stock_codes_query:
-            stock = Stock.query.filter_by(code=code, market=market).first()
-            if stock:
-                all_stocks.append({
-                    'code': stock.code,
-                    'market': stock.market,
-                    'name': stock.name
-                })
-            else:
-                all_stocks.append({
-                    'code': code,
-                    'market': market,
-                    'name': ''
-                })
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'market_stats': market_stats,
-                'stock_stats': stock_stats,
-                'all_stocks': all_stocks,
-                'selected_stock_codes': stock_codes
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@stock_bp.route('/api/transactions')
+# 交易记录相关API
+@stock_bp.route('/transactions')
 @login_required
 def get_transactions():
+    """获取交易记录列表"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 15, type=int)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    market = request.args.get('market')
+    stock_codes = request.args.getlist('stock_codes')
     
     query = StockTransaction.query.filter_by(user_id=session['user_id'])
+    
+    if start_date:
+        query = query.filter(StockTransaction.transaction_date >= start_date)
+    if end_date:
+        query = query.filter(StockTransaction.transaction_date <= end_date)
+    if market:
+        query = query.filter_by(market=market)
+    if stock_codes:
+        query = query.filter(StockTransaction.stock_code.in_(stock_codes))
+        
     pagination = query.order_by(StockTransaction.transaction_date.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
@@ -1451,9 +38,363 @@ def get_transactions():
     return jsonify({
         'success': True,
         'data': {
-            'items': [trans.to_dict() for trans in pagination.items],
+            'items': [item.to_dict() for item in pagination.items],
             'total': pagination.total,
             'pages': pagination.pages,
             'current_page': pagination.page
         }
-    }) 
+    })
+
+@stock_bp.route('/transactions/add', methods=['POST'])
+@login_required
+def add_transaction():
+    """添加交易记录"""
+    try:
+        data = request.get_json()
+        
+        # 创建交易记录
+        transaction = StockTransaction(
+            user_id=session['user_id'],
+            stock_code=data['stock_code'],
+            market=data['market'],
+            transaction_date=datetime.strptime(data['transaction_date'], '%Y-%m-%d'),
+            transaction_type=data['transaction_type'],
+            transaction_code=data['transaction_code'],
+            broker_fee=data.get('broker_fee', 0),
+            transaction_levy=data.get('transaction_levy', 0),
+            stamp_duty=data.get('stamp_duty', 0),
+            trading_fee=data.get('trading_fee', 0),
+            deposit_fee=data.get('deposit_fee', 0)
+        )
+        
+        # 添加交易明细
+        for detail in data['details']:
+            transaction_detail = TransactionDetail(
+                quantity=detail['quantity'],
+                price=detail['price']
+            )
+            transaction.details.append(transaction_detail)
+        
+        # 如果是非港股，获取汇率
+        if transaction.market != 'HK':
+            exchange_rate = ExchangeRateService().get_exchange_rate(
+                'USD' if transaction.market == 'USA' else transaction.market,
+                transaction.transaction_date.strftime('%Y-%m-%d')
+            )
+            transaction.exchange_rate = exchange_rate
+        
+        db.session.add(transaction)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '交易记录添加成功',
+            'data': transaction.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'添加交易记录失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'添加失败：{str(e)}'
+        }), 500
+
+@stock_bp.route('/transactions/<int:id>', methods=['PUT'])
+@login_required
+def edit_transaction(id):
+    """编辑交易记录"""
+    transaction = StockTransaction.query.get_or_404(id)
+    
+    # 检查权限
+    if transaction.user_id != session['user_id']:
+        return jsonify({
+            'success': False,
+            'message': '无权限编辑此记录'
+        }), 403
+    
+    try:
+        data = request.get_json()
+        
+        # 更新交易记录
+        transaction.stock_code = data['stock_code']
+        transaction.market = data['market']
+        transaction.transaction_date = datetime.strptime(data['transaction_date'], '%Y-%m-%d')
+        transaction.transaction_type = data['transaction_type']
+        transaction.transaction_code = data['transaction_code']
+        transaction.broker_fee = data.get('broker_fee', 0)
+        transaction.transaction_levy = data.get('transaction_levy', 0)
+        transaction.stamp_duty = data.get('stamp_duty', 0)
+        transaction.trading_fee = data.get('trading_fee', 0)
+        transaction.deposit_fee = data.get('deposit_fee', 0)
+        
+        # 更新交易明细
+        transaction.details.clear()
+        for detail in data['details']:
+            transaction_detail = TransactionDetail(
+                quantity=detail['quantity'],
+                price=detail['price']
+            )
+            transaction.details.append(transaction_detail)
+        
+        # 如果是非港股，更新汇率
+        if transaction.market != 'HK':
+            exchange_rate = ExchangeRateService().get_exchange_rate(
+                'USD' if transaction.market == 'USA' else transaction.market,
+                transaction.transaction_date.strftime('%Y-%m-%d')
+            )
+            transaction.exchange_rate = exchange_rate
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '交易记录更新成功',
+            'data': transaction.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'更新交易记录失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'更新失败：{str(e)}'
+        }), 500
+
+@stock_bp.route('/transactions/<int:id>', methods=['DELETE'])
+@login_required
+def delete_transaction(id):
+    """删除交易记录"""
+    transaction = StockTransaction.query.get_or_404(id)
+    
+    # 检查权限
+    if transaction.user_id != session['user_id']:
+        return jsonify({
+            'success': False,
+            'message': '无权限删除此记录'
+        }), 403
+    
+    try:
+        db.session.delete(transaction)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '交易记录删除成功'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'删除交易记录失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'删除失败：{str(e)}'
+        }), 500
+
+# 汇率相关API
+@stock_bp.route('/exchange_rates')
+@login_required
+def get_exchange_rates():
+    """获取汇率列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    currency = request.args.get('currency')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    query = ExchangeRate.query
+    
+    if currency:
+        query = query.filter_by(currency=currency)
+    if start_date:
+        query = query.filter(ExchangeRate.rate_date >= start_date)
+    if end_date:
+        query = query.filter(ExchangeRate.rate_date <= end_date)
+        
+    pagination = query.order_by(ExchangeRate.rate_date.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'items': [item.to_dict() for item in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
+        }
+    })
+
+@stock_bp.route('/exchange_rates/add', methods=['POST'])
+@login_required
+def add_exchange_rate():
+    """添加汇率记录"""
+    try:
+        data = request.get_json()
+        
+        exchange_rate = ExchangeRate(
+            currency=data['currency'],
+            rate_date=datetime.strptime(data['rate_date'], '%Y-%m-%d').date(),
+            rate=data['rate'],
+            source='MANUAL'
+        )
+        
+        db.session.add(exchange_rate)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '汇率添加成功',
+            'data': exchange_rate.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'添加汇率失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'添加失败：{str(e)}'
+        }), 500
+
+@stock_bp.route('/exchange_rates/fetch_missing', methods=['POST'])
+@login_required
+def fetch_missing_rates():
+    """获取缺失的汇率"""
+    try:
+        service = ExchangeRateService()
+        stats = service.update_missing_rates()
+        
+        return jsonify({
+            'success': True,
+            'message': f"成功更新 {stats['updated']} 条汇率记录",
+            'data': stats
+        })
+        
+    except Exception as e:
+        logger.error(f'获取缺失汇率失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'更新失败：{str(e)}'
+        }), 500
+
+# 股票相关API
+@stock_bp.route('/stocks')
+@login_required
+def get_stocks():
+    """获取股票列表"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    market = request.args.get('market')
+    search = request.args.get('search')
+    
+    query = Stock.query
+    
+    if market:
+        query = query.filter_by(market=market)
+    if search:
+        query = query.filter(
+            (Stock.code.like(f'%{search}%')) |
+            (Stock.name.like(f'%{search}%'))
+        )
+        
+    pagination = query.order_by(Stock.market, Stock.code).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'items': [item.to_dict() for item in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
+        }
+    })
+
+@stock_bp.route('/stocks', methods=['POST'])
+@login_required
+def add_stock():
+    """添加股票"""
+    try:
+        data = request.get_json()
+        
+        stock = Stock(
+            code=data['code'],
+            market=data['market'],
+            name=data['name'],
+            full_name=data.get('full_name'),
+            industry=data.get('industry'),
+            currency=data.get('currency')
+        )
+        
+        db.session.add(stock)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '股票添加成功',
+            'data': stock.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'添加股票失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'添加失败：{str(e)}'
+        }), 500
+
+@stock_bp.route('/stocks/<int:id>', methods=['PUT'])
+@login_required
+def edit_stock(id):
+    """编辑股票"""
+    stock = Stock.query.get_or_404(id)
+    
+    try:
+        data = request.get_json()
+        
+        stock.code = data['code']
+        stock.market = data['market']
+        stock.name = data['name']
+        stock.full_name = data.get('full_name')
+        stock.industry = data.get('industry')
+        stock.currency = data.get('currency')
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '股票更新成功',
+            'data': stock.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'更新股票失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'更新失败：{str(e)}'
+        }), 500
+
+@stock_bp.route('/stocks/<int:id>', methods=['DELETE'])
+@login_required
+def delete_stock(id):
+    """删除股票"""
+    stock = Stock.query.get_or_404(id)
+    
+    try:
+        db.session.delete(stock)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '股票删除成功'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'删除股票失败: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': f'删除失败：{str(e)}'
+        }), 500 
