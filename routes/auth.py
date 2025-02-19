@@ -1,5 +1,5 @@
 from flask import Blueprint, request, session, jsonify
-from models import db, User
+from models.user import User
 from flask_login import login_user, logout_user, login_required
 
 auth_bp = Blueprint('auth', __name__)
@@ -16,23 +16,26 @@ def register():
             'message': '用户名和密码不能为空'
         }), 400
     
-    user = User.query.filter_by(username=username).first()
-    if user:
+    if User.find_by_username(username):
         return jsonify({
             'success': False,
             'message': '用户名已存在'
         }), 400
     
-    new_user = User(username=username)
+    new_user = User()
+    new_user.username = username
     new_user.set_password(password)
     
-    db.session.add(new_user)
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'message': '注册成功'
-    })
+    if new_user.save():
+        return jsonify({
+            'success': True,
+            'message': '注册成功'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': '注册失败'
+        }), 500
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -46,10 +49,11 @@ def login():
             'message': '用户名和密码不能为空'
         }), 400
     
-    user = User.query.filter_by(username=username).first()
+    user = User.find_by_username(username)
     if user and user.check_password(password):
         login_user(user)
         session['user_id'] = user.id
+        user.update_last_login()
         return jsonify({
             'success': True,
             'message': '登录成功',
@@ -82,8 +86,15 @@ def logout():
 def check_login():
     """检查登录状态API"""
     is_authenticated = 'user_id' in session
+    user = None
+    if is_authenticated:
+        user = User.get_by_id(session.get('user_id'))
+        if not user:
+            is_authenticated = False
+            session.clear()
+    
     return jsonify({
         'success': True,
         'is_authenticated': is_authenticated,
-        'user': User.query.get(session.get('user_id')).to_dict() if is_authenticated else None
+        'user': user.to_dict() if user else None
     }) 

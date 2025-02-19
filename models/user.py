@@ -1,24 +1,19 @@
-from flask_sqlalchemy import SQLAlchemy
+"""
+用户模型
+"""
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import UserMixin
+from config.database import db
 
-db = SQLAlchemy()
-
-class User(UserMixin, db.Model):
-    """用户模型"""
-    __tablename__ = 'users'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255))
-    email = db.Column(db.String(120), unique=True)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login = db.Column(db.DateTime)
-    
-    def __repr__(self):
-        return f'<User {self.username}>'
+class User:
+    def __init__(self, data=None):
+        self.id = data.get('id') if data else None
+        self.username = data.get('username') if data else None
+        self.password_hash = data.get('password_hash') if data else None
+        self.email = data.get('email') if data else None
+        self.is_active = data.get('is_active', True) if data else True
+        self.created_at = data.get('created_at') if data else datetime.utcnow()
+        self.last_login = data.get('last_login') if data else None
         
     def set_password(self, password):
         """设置密码"""
@@ -28,12 +23,43 @@ class User(UserMixin, db.Model):
         """验证密码"""
         return check_password_hash(self.password_hash, password)
         
+    def save(self):
+        """保存用户"""
+        if self.id:
+            # 更新
+            sql = """
+                UPDATE users 
+                SET username=%s, password_hash=%s, email=%s, 
+                    is_active=%s, last_login=%s 
+                WHERE id=%s
+            """
+            params = (
+                self.username, self.password_hash, self.email,
+                self.is_active, self.last_login, self.id
+            )
+            return db.execute(sql, params)
+        else:
+            # 新增
+            sql = """
+                INSERT INTO users 
+                (username, password_hash, email, is_active, created_at) 
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            params = (
+                self.username, self.password_hash, self.email,
+                self.is_active, self.created_at
+            )
+            self.id = db.insert(sql, params)
+            return bool(self.id)
+            
     def update_last_login(self):
         """更新最后登录时间"""
         self.last_login = datetime.utcnow()
-        db.session.commit()
+        sql = "UPDATE users SET last_login=%s WHERE id=%s"
+        return db.execute(sql, (self.last_login, self.id))
         
     def to_dict(self):
+        """转换为字典"""
         return {
             'id': self.id,
             'username': self.username,
@@ -43,7 +69,30 @@ class User(UserMixin, db.Model):
             'last_login': self.last_login.isoformat() if self.last_login else None
         }
         
-    @classmethod
-    def find_by_username(cls, username):
+    @staticmethod
+    def get_by_id(user_id):
+        """根据ID获取用户"""
+        sql = "SELECT * FROM users WHERE id=%s"
+        data = db.fetch_one(sql, (user_id,))
+        return User(data) if data else None
+        
+    @staticmethod
+    def find_by_username(username):
         """根据用户名查找用户"""
-        return cls.query.filter_by(username=username).first() 
+        sql = "SELECT * FROM users WHERE username=%s"
+        data = db.fetch_one(sql, (username,))
+        return User(data) if data else None
+        
+    def get_id(self):
+        """Flask-Login需要的方法"""
+        return str(self.id)
+        
+    @property
+    def is_authenticated(self):
+        """Flask-Login需要的属性"""
+        return True
+        
+    @property
+    def is_anonymous(self):
+        """Flask-Login需要的属性"""
+        return False 

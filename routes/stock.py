@@ -1,6 +1,6 @@
 from flask import Blueprint, request, session, jsonify
 from flask_login import login_required
-from models import db, Stock, StockTransaction, TransactionDetail, ExchangeRate
+from config.database import db
 from datetime import datetime
 from services.exchange_rate import ExchangeRateService
 import logging
@@ -20,146 +20,213 @@ def get_transactions():
     market = request.args.get('market')
     stock_codes = request.args.getlist('stock_codes')
     
-    query = StockTransaction.query.filter_by(user_id=session['user_id'])
+    # 构建SQL查询
+    sql = """
+        SELECT * FROM stock_transactions 
+        WHERE user_id = %s
+    """
+    params = [session['user_id']]
     
     if start_date:
-        query = query.filter(StockTransaction.transaction_date >= start_date)
+        sql += " AND transaction_date >= %s"
+        params.append(start_date)
     if end_date:
-        query = query.filter(StockTransaction.transaction_date <= end_date)
+        sql += " AND transaction_date <= %s"
+        params.append(end_date)
     if market:
-        query = query.filter_by(market=market)
+        sql += " AND market = %s"
+        params.append(market)
     if stock_codes:
-        query = query.filter(StockTransaction.stock_code.in_(stock_codes))
+        placeholders = ','.join(['%s'] * len(stock_codes))
+        sql += f" AND stock_code IN ({placeholders})"
+        params.extend(stock_codes)
         
-    pagination = query.order_by(StockTransaction.transaction_date.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
+    # 添加排序和分页
+    sql += " ORDER BY transaction_date DESC LIMIT %s OFFSET %s"
+    params.extend([per_page, (page - 1) * per_page])
+    
+    # 获取总记录数
+    count_sql = """
+        SELECT COUNT(*) as total FROM stock_transactions 
+        WHERE user_id = %s
+    """
+    count_params = [session['user_id']]
+    
+    if start_date:
+        count_sql += " AND transaction_date >= %s"
+        count_params.append(start_date)
+    if end_date:
+        count_sql += " AND transaction_date <= %s"
+        count_params.append(end_date)
+    if market:
+        count_sql += " AND market = %s"
+        count_params.append(market)
+    if stock_codes:
+        placeholders = ','.join(['%s'] * len(stock_codes))
+        count_sql += f" AND stock_code IN ({placeholders})"
+        count_params.extend(stock_codes)
+    
+    # 执行查询
+    transactions = db.fetch_all(sql, params)
+    total_result = db.fetch_one(count_sql, count_params)
+    total = total_result['total'] if total_result else 0
     
     return jsonify({
         'success': True,
         'data': {
-            'items': [item.to_dict() for item in pagination.items],
-            'total': pagination.total,
-            'pages': pagination.pages,
-            'current_page': pagination.page
+            'items': transactions,
+            'total': total,
+            'pages': (total + per_page - 1) // per_page,
+            'current_page': page
         }
     })
 
-@stock_bp.route('/transactions/add', methods=['POST'])
+@stock_bp.route('/transactions', methods=['POST'])
 @login_required
 def add_transaction():
     """添加交易记录"""
     try:
         data = request.get_json()
+        required_fields = ['stock_code', 'stock_name', 'transaction_date', 'transaction_type', 
+                         'quantity', 'price', 'market', 'currency']
         
-        # 创建交易记录
-        transaction = StockTransaction(
-            user_id=session['user_id'],
-            stock_code=data['stock_code'],
-            market=data['market'],
-            transaction_date=datetime.strptime(data['transaction_date'], '%Y-%m-%d'),
-            transaction_type=data['transaction_type'],
-            transaction_code=data['transaction_code'],
-            broker_fee=data.get('broker_fee', 0),
-            transaction_levy=data.get('transaction_levy', 0),
-            stamp_duty=data.get('stamp_duty', 0),
-            trading_fee=data.get('trading_fee', 0),
-            deposit_fee=data.get('deposit_fee', 0)
-        )
+        # 验证必填字段
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'message': f'缺少必填字段: {field}'}), 400
         
-        # 添加交易明细
-        for detail in data['details']:
-            transaction_detail = TransactionDetail(
-                quantity=detail['quantity'],
-                price=detail['price']
-            )
-            transaction.details.append(transaction_detail)
+        # 插入交易记录
+        sql = """
+            INSERT INTO stock_transactions 
+            (user_id, stock_code, stock_name, transaction_date, transaction_type, 
+             quantity, price, market, currency, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+        """
+        params = [
+            session['user_id'],
+            data['stock_code'],
+            data['stock_name'],
+            data['transaction_date'],
+            data['transaction_type'],
+            data['quantity'],
+            data['price'],
+            data['market'],
+            data['currency']
+        ]
         
-        # 如果是非港股，获取汇率
-        if transaction.market != 'HK':
-            exchange_rate = ExchangeRateService().get_exchange_rate(
-                'USD' if transaction.market == 'USA' else transaction.market,
-                transaction.transaction_date.strftime('%Y-%m-%d')
-            )
-            transaction.exchange_rate = exchange_rate
+        transaction_id = db.insert(sql, params)
         
-        db.session.add(transaction)
-        db.session.commit()
+        if not transaction_id:
+            return jsonify({'success': False, 'message': '添加交易记录失败'}), 500
+            
+        # 如果交易货币不是美元，获取汇率并更新
+        if data['currency'] != 'USD':
+            exchange_rate_service = ExchangeRateService()
+            rate = exchange_rate_service.get_exchange_rate(data['currency'], data['transaction_date'])
+            
+            if rate:
+                update_sql = """
+                    UPDATE stock_transactions 
+                    SET exchange_rate = %s, 
+                        usd_price = price * %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """
+                db.execute(update_sql, [rate, rate, transaction_id])
         
         return jsonify({
             'success': True,
             'message': '交易记录添加成功',
-            'data': transaction.to_dict()
+            'data': {'id': transaction_id}
         })
         
     except Exception as e:
-        db.session.rollback()
-        logger.error(f'添加交易记录失败: {str(e)}')
-        return jsonify({
-            'success': False,
-            'message': f'添加失败：{str(e)}'
-        }), 500
+        logger.error(f"添加交易记录失败: {str(e)}")
+        return jsonify({'success': False, 'message': f'添加交易记录失败: {str(e)}'}), 500
 
 @stock_bp.route('/transactions/<int:id>', methods=['PUT'])
 @login_required
-def edit_transaction(id):
-    """编辑交易记录"""
-    transaction = StockTransaction.query.get_or_404(id)
-    
-    # 检查权限
-    if transaction.user_id != session['user_id']:
-        return jsonify({
-            'success': False,
-            'message': '无权限编辑此记录'
-        }), 403
-    
+def update_transaction(id):
+    """更新交易记录"""
     try:
         data = request.get_json()
         
-        # 更新交易记录
-        transaction.stock_code = data['stock_code']
-        transaction.market = data['market']
-        transaction.transaction_date = datetime.strptime(data['transaction_date'], '%Y-%m-%d')
-        transaction.transaction_type = data['transaction_type']
-        transaction.transaction_code = data['transaction_code']
-        transaction.broker_fee = data.get('broker_fee', 0)
-        transaction.transaction_levy = data.get('transaction_levy', 0)
-        transaction.stamp_duty = data.get('stamp_duty', 0)
-        transaction.trading_fee = data.get('trading_fee', 0)
-        transaction.deposit_fee = data.get('deposit_fee', 0)
+        # 检查记录是否存在且属于当前用户
+        check_sql = "SELECT id FROM stock_transactions WHERE id = %s AND user_id = %s"
+        transaction = db.fetch_one(check_sql, [id, session['user_id']])
         
-        # 更新交易明细
-        transaction.details.clear()
-        for detail in data['details']:
-            transaction_detail = TransactionDetail(
-                quantity=detail['quantity'],
-                price=detail['price']
-            )
-            transaction.details.append(transaction_detail)
+        if not transaction:
+            return jsonify({'success': False, 'message': '交易记录不存在或无权限修改'}), 404
         
-        # 如果是非港股，更新汇率
-        if transaction.market != 'HK':
-            exchange_rate = ExchangeRateService().get_exchange_rate(
-                'USD' if transaction.market == 'USA' else transaction.market,
-                transaction.transaction_date.strftime('%Y-%m-%d')
-            )
-            transaction.exchange_rate = exchange_rate
+        # 构建更新SQL
+        update_fields = []
+        params = []
         
-        db.session.commit()
+        field_mapping = {
+            'stock_code': 'stock_code',
+            'stock_name': 'stock_name',
+            'transaction_date': 'transaction_date',
+            'transaction_type': 'transaction_type',
+            'quantity': 'quantity',
+            'price': 'price',
+            'market': 'market',
+            'currency': 'currency'
+        }
+        
+        for key, field in field_mapping.items():
+            if key in data:
+                update_fields.append(f"{field} = %s")
+                params.append(data[key])
+        
+        if not update_fields:
+            return jsonify({'success': False, 'message': '没有需要更新的字段'}), 400
+            
+        update_fields.append("updated_at = NOW()")
+        params.append(id)  # WHERE id = %s 的参数
+        
+        sql = f"""
+            UPDATE stock_transactions 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """
+        
+        db.execute(sql, params)
+        
+        # 如果更新了货币或价格，重新计算美元价格
+        if 'currency' in data or 'price' in data:
+            # 获取最新的记录信息
+            transaction_sql = """
+                SELECT currency, price, transaction_date 
+                FROM stock_transactions 
+                WHERE id = %s
+            """
+            transaction = db.fetch_one(transaction_sql, [id])
+            
+            if transaction and transaction['currency'] != 'USD':
+                exchange_rate_service = ExchangeRateService()
+                rate = exchange_rate_service.get_exchange_rate(
+                    transaction['currency'], 
+                    transaction['transaction_date']
+                )
+                
+                if rate:
+                    update_sql = """
+                        UPDATE stock_transactions 
+                        SET exchange_rate = %s,
+                            usd_price = price * %s,
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """
+                    db.execute(update_sql, [rate, rate, id])
         
         return jsonify({
             'success': True,
-            'message': '交易记录更新成功',
-            'data': transaction.to_dict()
+            'message': '交易记录更新成功'
         })
         
     except Exception as e:
-        db.session.rollback()
-        logger.error(f'更新交易记录失败: {str(e)}')
-        return jsonify({
-            'success': False,
-            'message': f'更新失败：{str(e)}'
-        }), 500
+        logger.error(f"更新交易记录失败: {str(e)}")
+        return jsonify({'success': False, 'message': f'更新交易记录失败: {str(e)}'}), 500
 
 @stock_bp.route('/transactions/<int:id>', methods=['DELETE'])
 @login_required
@@ -190,6 +257,103 @@ def delete_transaction(id):
             'success': False,
             'message': f'删除失败：{str(e)}'
         }), 500
+
+@stock_bp.route('/transactions/logs', methods=['GET'])
+@login_required
+def get_transaction_logs():
+    """获取交易日志"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        market = request.args.get('market')
+        stock_code = request.args.get('stock_code')
+        transaction_type = request.args.get('transaction_type')
+        
+        # 构建SQL查询
+        sql = """
+            SELECT 
+                t.*,
+                DATE_FORMAT(t.transaction_date, '%Y-%m-%d') as formatted_date,
+                CASE 
+                    WHEN t.transaction_type = 'buy' THEN t.quantity * t.price
+                    ELSE -t.quantity * t.price
+                END as transaction_amount,
+                CASE 
+                    WHEN t.transaction_type = 'buy' THEN t.quantity * COALESCE(t.usd_price, t.price)
+                    ELSE -t.quantity * COALESCE(t.usd_price, t.price)
+                END as transaction_amount_usd
+            FROM stock_transactions t
+            WHERE t.user_id = %s
+        """
+        params = [session['user_id']]
+        
+        if start_date:
+            sql += " AND t.transaction_date >= %s"
+            params.append(start_date)
+        if end_date:
+            sql += " AND t.transaction_date <= %s"
+            params.append(end_date)
+        if market:
+            sql += " AND t.market = %s"
+            params.append(market)
+        if stock_code:
+            sql += " AND t.stock_code = %s"
+            params.append(stock_code)
+        if transaction_type:
+            sql += " AND t.transaction_type = %s"
+            params.append(transaction_type)
+            
+        # 获取总记录数
+        count_sql = f"SELECT COUNT(*) as total FROM ({sql}) as temp"
+        total_result = db.fetch_one(count_sql, params)
+        total = total_result['total'] if total_result else 0
+        
+        # 添加排序和分页
+        sql += " ORDER BY t.transaction_date DESC LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
+        
+        # 执行查询
+        logs = db.fetch_all(sql, params)
+        
+        # 获取当前页面涉及的股票的累计持仓情况
+        if logs:
+            stock_codes = list(set(log['stock_code'] for log in logs))
+            placeholders = ','.join(['%s'] * len(stock_codes))
+            
+            position_sql = f"""
+                SELECT 
+                    stock_code,
+                    SUM(CASE WHEN transaction_type = 'buy' THEN quantity ELSE -quantity END) as total_quantity,
+                    SUM(CASE WHEN transaction_type = 'buy' THEN quantity * price ELSE -quantity * price END) as total_amount
+                FROM stock_transactions
+                WHERE user_id = %s AND stock_code IN ({placeholders})
+                GROUP BY stock_code
+            """
+            position_params = [session['user_id']] + stock_codes
+            positions = db.fetch_all(position_sql, position_params)
+            position_map = {p['stock_code']: p for p in positions}
+            
+            # 添加累计持仓信息到日志中
+            for log in logs:
+                position = position_map.get(log['stock_code'], {})
+                log['cumulative_quantity'] = position.get('total_quantity', 0)
+                log['cumulative_amount'] = position.get('total_amount', 0)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'items': logs,
+                'total': total,
+                'pages': (total + per_page - 1) // per_page,
+                'current_page': page
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取交易日志失败: {str(e)}")
+        return jsonify({'success': False, 'message': f'获取交易日志失败: {str(e)}'}), 500
 
 # 汇率相关API
 @stock_bp.route('/exchange_rates')
@@ -397,4 +561,59 @@ def delete_stock(id):
         return jsonify({
             'success': False,
             'message': f'删除失败：{str(e)}'
-        }), 500 
+        }), 500
+
+@stock_bp.route('/market-summary', methods=['GET'])
+@login_required
+def get_market_summary():
+    """获取市场汇总信息"""
+    try:
+        # 获取各市场的持仓总值（按原始货币）
+        market_sql = """
+            SELECT 
+                market,
+                currency,
+                COUNT(DISTINCT stock_code) as stock_count,
+                SUM(CASE WHEN transaction_type = 'buy' THEN quantity ELSE -quantity END) as total_quantity,
+                SUM(CASE WHEN transaction_type = 'buy' THEN quantity * price ELSE -quantity * price END) as total_amount
+            FROM stock_transactions 
+            WHERE user_id = %s
+            GROUP BY market, currency
+            HAVING total_quantity > 0
+        """
+        market_summary = db.fetch_all(market_sql, [session['user_id']])
+        
+        # 获取美元总值
+        usd_sql = """
+            SELECT 
+                market,
+                SUM(CASE WHEN transaction_type = 'buy' THEN quantity ELSE -quantity END) * 
+                    COALESCE(usd_price, price) as usd_value
+            FROM stock_transactions 
+            WHERE user_id = %s
+            GROUP BY market
+            HAVING SUM(CASE WHEN transaction_type = 'buy' THEN quantity ELSE -quantity END) > 0
+        """
+        usd_values = db.fetch_all(usd_sql, [session['user_id']])
+        usd_map = {item['market']: item['usd_value'] for item in usd_values}
+        
+        # 计算总的美元市值
+        total_usd_value = sum(usd_map.values())
+        
+        # 添加美元价值和占比信息
+        for summary in market_summary:
+            market = summary['market']
+            summary['usd_value'] = usd_map.get(market, 0)
+            summary['percentage'] = (summary['usd_value'] / total_usd_value * 100) if total_usd_value > 0 else 0
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'market_summary': market_summary,
+                'total_usd_value': total_usd_value
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取市场汇总信息失败: {str(e)}")
+        return jsonify({'success': False, 'message': f'获取市场汇总信息失败: {str(e)}'}), 500 

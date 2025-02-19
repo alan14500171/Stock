@@ -1,6 +1,6 @@
 from flask import Flask
 from config.config import config
-from config.database import init_db
+from config.database import db
 from services.exchange_rate import ExchangeRateService
 from flask_cors import CORS
 from flask_login import LoginManager
@@ -12,8 +12,16 @@ def create_app(config_name='development'):
     # 加载配置
     app.config.from_object(config[config_name])
     
-    # 初始化数据库
-    init_db(app)
+    # 初始化数据库连接
+    db_config = {
+        'host': '172.16.0.109',
+        'user': 'root',
+        'password': 'Zxc000123',
+        'database': 'Stock',
+        'port': 3306
+    }
+    if not db.connect(db_config):
+        raise Exception("数据库连接失败")
     
     # 初始化Flask-Login
     login_manager = LoginManager()
@@ -22,7 +30,7 @@ def create_app(config_name='development'):
     
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        return User.get_by_id(int(user_id))
     
     # 配置CORS
     CORS(app, resources={
@@ -48,8 +56,11 @@ def create_app(config_name='development'):
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(
-        host=app.config['HOST'],
-        port=app.config['PORT'],
-        debug=app.config['DEBUG']
-    ) 
+    try:
+        app.run(
+            host=app.config['HOST'],
+            port=app.config['PORT'],
+            debug=app.config['DEBUG']
+        )
+    finally:
+        db.close() 
