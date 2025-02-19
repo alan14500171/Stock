@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify, make_response
-from models import db, StockTransaction, StockTransactionDetail, ExchangeRate, Stock
+from models import db, StockTransaction, TransactionDetail, ExchangeRate, Stock
 from routes.auth import login_required
 from datetime import datetime, timedelta
 from sqlalchemy import distinct
-from utils.exchange_rate import ensure_exchange_rate_exists, get_exchange_rate
+from services.exchange_rate import ExchangeRateService
 from collections import defaultdict
 import yfinance as yf
 import requests
@@ -11,6 +11,22 @@ from bs4 import BeautifulSoup
 from sqlalchemy import or_
 
 stock_bp = Blueprint('stock', __name__)
+
+exchange_rate_service = ExchangeRateService()
+
+def get_exchange_rate(currency, date=None):
+    """获取指定货币和日期的汇率"""
+    if currency == 'HKD':
+        return 1.0
+        
+    # 先从数据库查找
+    if date:
+        rate_record = ExchangeRate.find_by_date(currency, date)
+        if rate_record:
+            return rate_record.rate
+            
+    # 如果没有找到，从服务获取
+    return exchange_rate_service.get_exchange_rate(currency, date)
 
 def calculate_fifo_cost(buy_records, sell_quantity, sell_fees):
     total_cost = 0
@@ -762,7 +778,7 @@ def add():
             for quantity, price in zip(quantities, prices):
                 if not quantity or not price:
                     continue
-                detail = StockTransactionDetail(
+                detail = TransactionDetail(
                     quantity=int(quantity),
                     price=float(price)
                 )
@@ -844,7 +860,7 @@ def edit(id):
             transaction.deposit_fee = float(request.form.get('deposit_fee', 0))
             
             # 删除旧的明细记录
-            StockTransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
+            TransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
             
             # 添加新的明细记录
             quantities = request.form.getlist('quantities[]')
@@ -852,7 +868,7 @@ def edit(id):
             
             for quantity, price in zip(quantities, prices):
                 if quantity and price:  # 确保数量和价格都有值
-                    detail = StockTransactionDetail(
+                    detail = TransactionDetail(
                         transaction_id=transaction.id,
                         quantity=int(quantity),
                         price=float(price)
@@ -879,7 +895,7 @@ def delete(id):
     
     try:
         # 删除明细记录
-        StockTransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
+        TransactionDetail.query.filter_by(transaction_id=transaction.id).delete()
         # 删除主记录
         db.session.delete(transaction)
         db.session.commit()
@@ -923,7 +939,6 @@ def exchange_rate_list():
 def edit_exchange_rate(id):
     """修改汇率"""
     try:
-        rate_id = request.form.get('rate_id')
         new_rate = float(request.form.get('rate'))
         
         # 获取汇率记录
@@ -946,7 +961,6 @@ def edit_exchange_rate(id):
                 transaction.exchange_rate = new_rate
         
         db.session.commit()
-        flash('汇率更新成功')
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
