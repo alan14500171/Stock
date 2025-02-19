@@ -49,7 +49,7 @@ const isAuthenticated = ref(false)
 // 检查登录状态
 const checkAuth = async () => {
   try {
-    const response = await fetch('/auth/check_login', {
+    const response = await fetch('/api/auth/check_login', {
       credentials: 'include'
     })
     const data = await response.json()
@@ -76,7 +76,7 @@ onMounted(checkAuth)
 
 const handleLogout = async () => {
   try {
-    const response = await axios.get('/auth/logout')
+    const response = await axios.get('/api/auth/logout')
     if (response.data.success) {
       isAuthenticated.value = false
       router.push('/auth/login')

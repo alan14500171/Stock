@@ -91,7 +91,7 @@ const handleRegister = async () => {
     formData.append('username', form.username)
     formData.append('password', form.password)
     
-    const response = await axios.post('/auth/register', formData)
+    const response = await axios.post('/api/auth/register', formData)
     
     if (response.data.success) {
       alert('注册成功，请登录')

@@ -208,9 +208,9 @@ const searchForm = reactive({
 // 获取所有股票
 const fetchStocks = async () => {
   try {
-    const response = await axios.get('/stock/api/stock/list')
+    const response = await axios.get('/api/stock/stocks')
     if (response.data.success) {
-      allStocks.value = response.data.data
+      allStocks.value = response.data.data.items
     }
   } catch (error) {
     console.error('获取股票列表失败:', error)
@@ -233,7 +233,7 @@ const fetchTransactions = async () => {
     params.append('page', currentPage.value)
     params.append('per_page', pageSize)
     
-    const response = await axios.get(`/stock/api/transactions?${params.toString()}`)
+    const response = await axios.get(`/api/stock/transactions?${params.toString()}`)
     if (response.data.success) {
       transactions.value = response.data.data.items
       totalPages.value = Math.ceil(response.data.data.total / pageSize)
@@ -319,7 +319,7 @@ const confirmDelete = async (transaction) => {
   if (!confirm('确定要删除这条交易记录吗？')) return
   
   try {
-    const response = await axios.post(`/stock/api/transactions/delete/${transaction.id}`)
+    const response = await axios.delete(`/api/stock/transactions/${transaction.id}`)
     if (response.data.success) {
       // 重新加载数据
       fetchTransactions()

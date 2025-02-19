@@ -75,7 +75,7 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth) {
     try {
       // 检查登录状态
-      const response = await fetch('/auth/check_login', {
+      const response = await fetch('/api/auth/check_login', {
         credentials: 'include'  // 包含 cookies
       })
       const data = await response.json()

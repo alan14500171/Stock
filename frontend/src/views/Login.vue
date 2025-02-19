@@ -92,7 +92,7 @@ const handleLogin = async () => {
     formData.append('username', form.username)
     formData.append('password', form.password)
     
-    const response = await axios.post('/auth/login', formData)
+    const response = await axios.post('/api/auth/login', formData)
     
     if (response.data.success) {
       // 登录成功，跳转到之前的页面或默认页面

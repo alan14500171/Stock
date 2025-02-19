@@ -14,6 +14,18 @@ class Config:
         'mysql+pymysql://root:Zxc000123@172.16.0.109:3306/Stock?charset=utf8mb4'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # 数据库连接池配置
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 10,
+        'pool_timeout': 30,
+        'pool_recycle': 3600,
+        'connect_args': {
+            'connect_timeout': 10,
+            'read_timeout': 10,
+            'write_timeout': 10
+        }
+    }
+    
     # 分页配置
     ITEMS_PER_PAGE = 15
     
