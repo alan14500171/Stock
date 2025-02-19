@@ -1,6 +1,6 @@
-from flask import Flask, render_template
+from flask import Flask
 from config.config import config
-from config.database import init_db, db
+from config.database import init_db
 from services.exchange_rate import ExchangeRateService
 from flask_cors import CORS
 from flask_login import LoginManager
@@ -26,7 +26,7 @@ def create_app(config_name='development'):
     
     # 配置CORS
     CORS(app, resources={
-        r"/*": {
+        r"/api/*": {
             "origins": ["http://localhost:9009"],
             "supports_credentials": True,
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -40,14 +40,9 @@ def create_app(config_name='development'):
     
     # 注册蓝图
     from routes import auth_bp, stock_bp
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(stock_bp)  # 移除url_prefix，因为前端已经包含在请求路径中
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(stock_bp, url_prefix='/api/stock')
     
-    # 注册主页路由
-    @app.route('/')
-    def index():
-        return render_template('index.html')
-        
     return app
 
 app = create_app()

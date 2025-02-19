@@ -1,8 +1,8 @@
 <template>
   <div class="app-container">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark" v-if="isAuthenticated">
       <div class="container">
-        <router-link class="navbar-brand" to="/">股票交易系统</router-link>
+        <router-link class="navbar-brand" to="/profit/stats">股票交易系统</router-link>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
           <span class="navbar-toggler-icon"></span>
         </button>
@@ -33,23 +33,53 @@
     </nav>
 
     <div class="container mt-4">
-      <router-view></router-view>
+      <router-view @login-success="handleLoginSuccess"></router-view>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 
 const router = useRouter()
+const isAuthenticated = ref(false)
+
+// 检查登录状态
+const checkAuth = async () => {
+  try {
+    const response = await fetch('/auth/check_login', {
+      credentials: 'include'
+    })
+    const data = await response.json()
+    isAuthenticated.value = data.is_authenticated
+    if (data.is_authenticated) {
+      router.push('/profit/stats')
+    } else {
+      router.push('/auth/login')
+    }
+  } catch (error) {
+    console.error('检查登录状态失败:', error)
+    isAuthenticated.value = false
+    router.push('/auth/login')
+  }
+}
+
+// 处理登录成功
+const handleLoginSuccess = () => {
+  isAuthenticated.value = true
+}
+
+// 组件挂载时检查登录状态
+onMounted(checkAuth)
 
 const handleLogout = async () => {
   try {
     const response = await axios.get('/auth/logout')
     if (response.data.success) {
-      // 使用后端返回的重定向 URL 进行跳转
-      window.location.href = response.data.redirect
+      isAuthenticated.value = false
+      router.push('/auth/login')
     }
   } catch (error) {
     console.error('退出登录失败:', error)

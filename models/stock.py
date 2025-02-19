@@ -1,32 +1,35 @@
 from datetime import datetime
-from .base import BaseModel, db
+from .base import db
 
-class Stock(BaseModel):
-    """股票基本信息模型"""
+class Stock(db.Model):
+    """股票信息表"""
     __tablename__ = 'stocks'
     
-    code = db.Column(db.String(20), nullable=False, index=True)
-    name = db.Column(db.String(100))
-    market = db.Column(db.String(10), nullable=False, index=True)
-    full_name = db.Column(db.String(200))
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), nullable=False)  # 股票代码
+    market = db.Column(db.String(10), nullable=False)  # 市场：HK或USA
+    name = db.Column(db.String(100), nullable=False)  # 股票名称（中文）
+    full_name = db.Column(db.String(200))  # 公司全称
+    industry = db.Column(db.String(50))  # 行业
+    currency = db.Column(db.String(3))  # 交易货币
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # 添加唯一约束
     __table_args__ = (
-        db.UniqueConstraint('code', 'market', name='uix_stock_code_market'),
+        db.UniqueConstraint('code', 'market', name='uix_code_market'),
     )
     
-    def __repr__(self):
-        return f'<Stock {self.market}:{self.code}>'
-        
     def to_dict(self):
         return {
             'id': self.id,
             'code': self.code,
-            'name': self.name,
             'market': self.market,
+            'name': self.name,
             'full_name': self.full_name,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'industry': self.industry,
+            'currency': self.currency,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
         }
         
     @classmethod

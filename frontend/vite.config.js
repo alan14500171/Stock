@@ -3,19 +3,20 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  base: './',
   server: {
     port: 9009,
     proxy: {
-      '/stock': {
-        target: 'http://localhost:9099',
+      '/auth': {
+        target: 'http://127.0.0.1:9099',
         changeOrigin: true
       },
       '/api': {
-        target: 'http://localhost:9099',
+        target: 'http://127.0.0.1:9099',
         changeOrigin: true
       },
-      '/stocks': {
-        target: 'http://localhost:9099',
+      '/stock': {
+        target: 'http://127.0.0.1:9099',
         changeOrigin: true
       }
     }

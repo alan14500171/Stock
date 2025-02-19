@@ -1,9 +1,9 @@
 <template>
-  <div class="login-container">
-    <div class="login-box">
+  <div class="register-container">
+    <div class="register-box">
       <div class="card shadow-sm">
         <div class="card-body p-4">
-          <h4 class="text-center mb-4">欢迎登录</h4>
+          <h4 class="text-center mb-4">注册账号</h4>
           
           <!-- 错误提示 -->
           <div v-if="error" class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -11,7 +11,7 @@
             <button type="button" class="btn-close" @click="error = ''"></button>
           </div>
 
-          <form @submit.prevent="handleLogin">
+          <form @submit.prevent="handleRegister">
             <!-- 用户名 -->
             <div class="form-floating mb-3">
               <input 
@@ -40,7 +40,7 @@
               <label for="password">密码</label>
             </div>
 
-            <!-- 登录按钮 -->
+            <!-- 按钮 -->
             <div class="d-grid gap-2">
               <button 
                 type="submit" 
@@ -48,15 +48,15 @@
                 :disabled="loading || !form.username || !form.password"
               >
                 <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
-                {{ loading ? '登录中...' : '登录' }}
+                {{ loading ? '注册中...' : '注册' }}
               </button>
               
               <router-link 
-                :to="{ name: 'Register' }" 
+                :to="{ name: 'Login' }" 
                 class="btn btn-outline-secondary"
                 :disabled="loading"
               >
-                注册新账号
+                返回登录
               </router-link>
             </div>
           </form>
@@ -68,11 +68,10 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 
 const router = useRouter()
-const route = useRoute()
 const loading = ref(false)
 const error = ref('')
 
@@ -81,7 +80,7 @@ const form = reactive({
   password: ''
 })
 
-const handleLogin = async () => {
+const handleRegister = async () => {
   if (loading.value) return
   
   error.value = ''
@@ -92,18 +91,17 @@ const handleLogin = async () => {
     formData.append('username', form.username)
     formData.append('password', form.password)
     
-    const response = await axios.post('/auth/login', formData)
+    const response = await axios.post('/auth/register', formData)
     
     if (response.data.success) {
-      // 登录成功，跳转到之前的页面或默认页面
-      const redirect = route.query.redirect || '/profit/stats'
-      router.push(redirect)
+      alert('注册成功，请登录')
+      router.push('/auth/login')
     } else {
-      error.value = response.data.message || '登录失败'
+      error.value = response.data.message || '注册失败'
     }
   } catch (err) {
-    console.error('登录失败:', err)
-    error.value = '登录失败，请稍后重试'
+    console.error('注册失败:', err)
+    error.value = '注册失败，请稍后重试'
   } finally {
     loading.value = false
   }
@@ -111,7 +109,7 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
-.login-container {
+.register-container {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -120,7 +118,7 @@ const handleLogin = async () => {
   padding: 20px;
 }
 
-.login-box {
+.register-box {
   width: 100%;
   max-width: 400px;
 }
