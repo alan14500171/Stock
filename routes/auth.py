@@ -1,16 +1,8 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
 from models import db, User
-from functools import wraps
+from flask_login import login_user, logout_user, login_required, current_user
 
 auth_bp = Blueprint('auth', __name__)
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -20,8 +12,10 @@ def register():
         
         user = User.query.filter_by(username=username).first()
         if user:
-            flash('用户名已存在')
-            return redirect(url_for('auth.register'))
+            return jsonify({
+                'success': False,
+                'message': '用户名已存在'
+            })
         
         new_user = User(username=username)
         new_user.set_password(password)
@@ -29,8 +23,10 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         
-        flash('注册成功，请登录')
-        return redirect(url_for('auth.login'))
+        return jsonify({
+            'success': True,
+            'message': '注册成功'
+        })
     
     return render_template('auth/register.html')
 
@@ -42,16 +38,34 @@ def login():
         
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            login_user(user)
             session['user_id'] = user.id
-            flash('登录成功')
-            return redirect(url_for('stock.stats'))
+            return jsonify({
+                'success': True,
+                'message': '登录成功'
+            })
         
-        flash('用户名或密码错误')
+        return jsonify({
+            'success': False,
+            'message': '用户名或密码错误'
+        })
     
     return render_template('auth/login.html')
 
 @auth_bp.route('/logout')
+@login_required
 def logout():
-    session.pop('user_id', None)
-    flash('已退出登录')
-    return redirect(url_for('auth.login')) 
+    """退出登录"""
+    try:
+        logout_user()
+        session.clear()  # 清除所有会话数据
+        return jsonify({
+            'success': True,
+            'message': '退出登录成功',
+            'redirect': url_for('auth.login')
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500 

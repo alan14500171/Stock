@@ -21,6 +21,13 @@
               <router-link class="nav-link" :to="{name: 'StockManager'}">股票管理</router-link>
             </li>
           </ul>
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item">
+              <a href="#" class="nav-link" @click.prevent="handleLogout">
+                <i class="fas fa-sign-out-alt"></i> 退出登录
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
     </nav>
@@ -32,7 +39,22 @@
 </template>
 
 <script setup>
-// 组件逻辑
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+
+const router = useRouter()
+
+const handleLogout = async () => {
+  try {
+    const response = await axios.get('/auth/logout')
+    if (response.data.success) {
+      // 使用后端返回的重定向 URL 进行跳转
+      window.location.href = response.data.redirect
+    }
+  } catch (error) {
+    console.error('退出登录失败:', error)
+  }
+}
 </script>
 
 <style>

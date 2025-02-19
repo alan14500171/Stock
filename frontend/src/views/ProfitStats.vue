@@ -262,8 +262,29 @@ const refreshData = () => {
 }
 
 // 搜索
-const search = () => {
-  fetchData()
+const search = async () => {
+  if (loading.value) return
+  
+  loading.value = true
+  try {
+    const params = new URLSearchParams()
+    if (searchForm.startDate) params.append('start_date', searchForm.startDate)
+    if (searchForm.endDate) params.append('end_date', searchForm.endDate)
+    if (searchForm.market) params.append('market', searchForm.market)
+    
+    const response = await axios.get(`/api/profit?${params.toString()}`)
+    console.log('API Response:', response.data) // 添加调试日志
+    if (response.data.success) {
+      marketStats.value = response.data.data.market_stats
+      stockStats.value = response.data.data.stock_stats
+      // 默认展开所有市场
+      expandAll()
+    }
+  } catch (error) {
+    console.error('获取数据失败:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
 // 重置搜索
@@ -271,7 +292,7 @@ const resetSearch = () => {
   searchForm.startDate = ''
   searchForm.endDate = ''
   searchForm.market = ''
-  fetchData()
+  search()
 }
 
 // 组件挂载时获取数据

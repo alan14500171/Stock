@@ -304,7 +304,7 @@ def calculate_stats(transactions):
             # 获取当前价格
             current_price = get_stock_price(code, stock['market'])
             if current_price:
-                stock['current_price'] = current_price['price']
+                stock['current_price'] = current_price
                 
                 # 计算市值(原始币种)
                 market_value = stock['current_price'] * stock['current_quantity']
@@ -424,21 +424,23 @@ def calculate_stats(transactions):
     return market_stats, sorted_stock_stats
 
 def get_holding_stocks(user_id):
-    """获取用户的持仓股票"""
+    """获取用户的持仓股票
+    Returns:
+        List[Tuple]: 返回元组列表，每个元组包含 (code, market, quantity)
+    """
     # 使用calculate_stats函数获取持仓信息
     transactions = StockTransaction.query.filter_by(user_id=user_id).all()
-    stats_data = calculate_stats(transactions)
+    market_stats, stock_stats = calculate_stats(transactions)
     
     # 提取持仓股票
     holding_stocks = []
-    for code, stock in stats_data['stock_stats'].items():
+    for code, stock in stock_stats.items():
         if stock['current_quantity'] > 0:
-            holding_stocks.append({
-                'code': code,
-                'market': stock['market'],
-                'quantity': stock['current_quantity'],
-                'avg_price': stock['avg_cost']
-            })
+            holding_stocks.append((
+                code,
+                stock['market'],
+                stock['current_quantity']
+            ))
     
     return holding_stocks
 
@@ -450,96 +452,24 @@ def get_stock_symbol(code, market):
         return code
 
 def get_stock_price(code, market):
-    """获取单个股票的实时价格"""
+    """获取股票当前价格
+    Args:
+        code (str): 股票代码
+        market (str): 市场代码 (HK/USA)
+    Returns:
+        float: 当前价格，如果获取失败则返回None
+    """
     try:
-        # 从数据库获取股票信息
-        stock = Stock.query.filter_by(code=code, market=market).first()
-        if not stock:
-            print(f"数据库中未找到股票: {market} {code}")
+        symbol = get_stock_symbol(code, market)
+        stock = yf.Ticker(symbol)
+        info = stock.info
+        
+        if 'regularMarketPrice' not in info or info['regularMarketPrice'] is None:
             return None
             
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
-        }
-        
-        url = None
-        if stock.full_name:  # 优先使用保存的谷歌查询代码
-            url = f'https://www.google.com/finance/quote/{stock.full_name}'
-        else:
-            if market == 'HK':
-                # 港股代码需要补足4位
-                padded_code = code.zfill(4)
-                url = f'https://www.google.com/finance/quote/{padded_code}:HKG'
-            elif market == 'USA':
-                # 设置请求头
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                
-                # 先尝试NASDAQ
-                try:
-                    test_url = f'https://www.google.com/finance/quote/{code}:NASDAQ'
-                    print(f"尝试NASDAQ: {test_url}")
-                    response = requests.get(test_url, headers=headers, timeout=10)
-                    if response.status_code == 200:
-                        soup = BeautifulSoup(response.text, 'html.parser')
-                        price_div = soup.find('div', {'data-last-price': True})
-                        if price_div and price_div.get('data-last-price'):
-                            url = test_url
-                            stock.full_name = f"{code}:NASDAQ"
-                            db.session.commit()
-                            print("在NASDAQ找到股票")
-                except Exception as e:
-                    print(f"NASDAQ查询失败: {str(e)}")
-                    url = None
-
-                # 如果NASDAQ查询失败，尝试NYSE
-                if not url:
-                    try:
-                        test_url = f'https://www.google.com/finance/quote/{code}:NYSE'
-                        print(f"尝试NYSE: {test_url}")
-                        response = requests.get(test_url, headers=headers, timeout=10)
-                        if response.status_code == 200:
-                            soup = BeautifulSoup(response.text, 'html.parser')
-                            price_div = soup.find('div', {'data-last-price': True})
-                            if price_div and price_div.get('data-last-price'):
-                                url = test_url
-                                stock.full_name = f"{code}:NYSE"
-                                db.session.commit()
-                                print("在NYSE找到股票")
-                    except Exception as e:
-                        print(f"NYSE查询失败: {str(e)}")
-                        url = None
-
-                if not url:
-                    # 如果两个交易所都查询失败
-                    raise ValueError(f"股票 {code} 在NASDAQ和NYSE均未找到")
-        
-        print(f"最终访问URL: {url}")
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        price_div = soup.find('div', {'data-last-price': True})
-        
-        if price_div and price_div.get('data-last-price'):
-            price = float(price_div.get('data-last-price'))
-            return {
-                'code': code,
-                'market': market,
-                'currency': 'HKD' if market == 'HK' else 'USD',
-                'price': price,
-                'timestamp': datetime.now()
-            }
-            
-        print("未能从页面解析到股价数据")
-        return None
-        
+        return info['regularMarketPrice']
     except Exception as e:
-        print(f"获取股价失败: {str(e)}")
+        print(f"获取 {code} 价格失败: {str(e)}")
         return None
 
 def get_multiple_quotes(stock_list):
@@ -554,71 +484,37 @@ def get_multiple_quotes(stock_list):
 @stock_bp.route('/api/portfolio/market-value')
 @login_required
 def get_portfolio_market_value():
-    """获取持仓股票的当前市值"""
     try:
-        # 获取持仓股票
+        # 获取持仓股票列表
         holdings = get_holding_stocks(session['user_id'])
-        if not holdings:
-            return jsonify({
-                'success': True,
-                'data': {
-                    'holdings': [],
-                    'total_value_hkd': 0
-                }
-            })
+        result = []
         
-        # 获取当前汇率
-        today = datetime.now().strftime('%Y-%m-%d')
-        usd_rate = get_exchange_rate('USD', today)
-        
-        # 获取实时报价
-        stocks = [(h['market'], h['code']) for h in holdings]
-        quotes = get_multiple_quotes(stocks)
-        
-        # 计算市值
-        total_value_hkd = 0
-        holdings_data = []
-        
-        for holding in holdings:
-            quote = quotes.get(holding['code'])
-            if not quote:
-                continue
-            
-            # 计算市值（转换为港币）
-            if quote['market'] == 'HK':
-                market_value_hkd = quote['price'] * holding['quantity']
-            else:  # USA
-                market_value_hkd = quote['price'] * holding['quantity'] * usd_rate
-            
-            # 更新持仓信息
-            holding_data = {
-                'code': holding['code'],
-                'market': holding['market'],
-                'quantity': holding['quantity'],
-                'avg_price': holding['avg_price'],
-                'current_price': quote['price'],
-                'currency': quote['currency'],
-                'market_value': quote['price'] * holding['quantity'],
-                'market_value_hkd': market_value_hkd,
-                'unrealized_profit': market_value_hkd - (holding['avg_price'] * holding['quantity'])
-            }
-            holdings_data.append(holding_data)
-            total_value_hkd += market_value_hkd
+        # 遍历持仓股票
+        for code, market, quantity in holdings:
+            try:
+                # 获取当前价格
+                current_price = get_stock_price(code, market)
+                result.append({
+                    'code': code,
+                    'market': market,
+                    'current_price': current_price
+                })
+            except Exception as e:
+                print(f"获取 {code} 价格失败: {str(e)}")
+                result.append({
+                    'code': code,
+                    'market': market,
+                    'current_price': None
+                })
         
         return jsonify({
             'success': True,
-            'data': {
-                'holdings': holdings_data,
-                'total_value_hkd': total_value_hkd,
-                'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
+            'data': result
         })
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+        print(f"获取股票价格失败: {str(e)}")
+        return jsonify({'success': False, 'error': '获取股票价格失败'})
 
 @stock_bp.route('/stock/codes')
 @login_required
@@ -906,9 +802,9 @@ def delete(id):
     
     return redirect(url_for('stock.list'))
 
-@stock_bp.route('/exchange_rates')
+@stock_bp.route('/api/exchange_rates')
 @login_required
-def exchange_rate_list():
+def api_exchange_rate_list():
     """汇率列表页面"""
     # 获取查询参数
     page = request.args.get('page', 1, type=int)
@@ -932,7 +828,15 @@ def exchange_rate_list():
         error_out=False
     )
     
-    return render_template('stock/exchange_rates.html', rates=rates, per_page=per_page)
+    return jsonify({
+        'success': True,
+        'data': {
+            'items': [rate.to_dict() for rate in rates.items],
+            'total': rates.total,
+            'pages': rates.pages,
+            'current_page': rates.page
+        }
+    })
 
 @stock_bp.route('/exchange_rates/edit/<int:id>', methods=['POST'])
 @login_required
@@ -1104,7 +1008,7 @@ def stats():
     response.set_data(template)
     return response
 
-@stock_bp.route('/stocks')
+@stock_bp.route('/api/stocks')
 @login_required
 def stocks():
     # 获取查询参数
@@ -1533,173 +1437,23 @@ def get_profit_stats():
             'error': str(e)
         }), 500
 
-def process_transaction(stock, market_stats, trans, market):
-    """处理单个交易记录
+@stock_bp.route('/api/transactions')
+@login_required
+def get_transactions():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
     
-    Args:
-        stock: 股票统计数据字典
-        market_stats: 市场统计数据字典
-        trans: 交易记录对象
-        market: 市场代码（HK/USA）
-    """
-    try:
-        # 更新基本统计数据
-        stock['transaction_count'] += 1
-        market_stats[market]['transaction_count'] += 1
-        
-        # 更新费用(原始币种)
-        stock['total_fees'] += trans.total_fees
-        market_stats[market]['total_fees'] += trans.total_fees
-        
-        # 转换为港币
-        if market != 'HK':
-            fees_hkd = trans.total_fees * trans.exchange_rate
-            stock['total_fees_hkd'] += fees_hkd
-            market_stats[market]['total_fees_hkd'] += fees_hkd
-        else:
-            stock['total_fees_hkd'] += trans.total_fees
-            market_stats[market]['total_fees_hkd'] += trans.total_fees
-        
-        if trans.transaction_type == 'BUY':
-            # 买入交易处理
-            stock['current_quantity'] += trans.total_quantity
-            stock['total_buy_quantity'] += trans.total_quantity  # 累加总买入数量
-            
-            # 更新买入总额(原始币种)
-            stock['total_buy'] += trans.total_amount
-            market_stats[market]['total_buy'] += trans.total_amount
-            
-            # 转换为港币
-            if market != 'HK':
-                buy_amount_hkd = trans.total_amount * trans.exchange_rate
-                stock['total_buy_hkd'] += buy_amount_hkd
-                market_stats[market]['total_buy_hkd'] += buy_amount_hkd
-            else:
-                stock['total_buy_hkd'] += trans.total_amount
-                market_stats[market]['total_buy_hkd'] += trans.total_amount
-            
-            # 计算平均成本(原始币种)
-            stock['avg_cost'] = stock['total_buy'] / stock['current_quantity'] if stock['current_quantity'] > 0 else 0
-            
-            # 添加到FIFO队列
-            stock['fifo_queue'].append({
-                'quantity': trans.total_quantity,
-                'price': trans.total_amount / trans.total_quantity,  # 原始币种单位成本
-                'date': trans.transaction_date,
-                'exchange_rate': trans.exchange_rate,
-                'fees': trans.total_fees,
-                'total_cost': trans.total_amount + trans.total_fees  # 总成本（含费用）
-            })
-            
-            # 记录买入交易详情
-            trans_detail = {
-                'transaction_date': trans.transaction_date,
-                'transaction_type': trans.transaction_type,
-                'transaction_code': trans.transaction_code,
-                'total_quantity': trans.total_quantity,
-                'total_amount': trans.total_amount,
-                'total_amount_hkd': trans.total_amount_hkd,
-                'average_price': trans.average_price,
-                'total_fees': trans.total_fees,
-                'exchange_rate': trans.exchange_rate
-            }
-            
-            stock['transactions'].append(trans_detail)
-            
-        else:  # SELL
-            # 卖出交易处理
-            stock['current_quantity'] -= trans.total_quantity
-            
-            # 更新卖出总额(原始币种)
-            stock['total_sell'] += trans.total_amount
-            market_stats[market]['total_sell'] += trans.total_amount
-            
-            # 转换为港币
-            if market != 'HK':
-                sell_amount_hkd = trans.total_amount * trans.exchange_rate
-                stock['total_sell_hkd'] += sell_amount_hkd
-                market_stats[market]['total_sell_hkd'] += sell_amount_hkd
-            else:
-                stock['total_sell_hkd'] += trans.total_amount
-                market_stats[market]['total_sell_hkd'] += trans.total_amount
-            
-            # 计算FIFO成本和盈亏
-            remaining_quantity = trans.total_quantity
-            total_cost = 0  # 原始币种的总成本（含买入费用）
-            fifo_cost_details = []
-            
-            # 确保按时间顺序处理买入记录
-            stock['fifo_queue'].sort(key=lambda x: x['date'])
-            
-            while remaining_quantity > 0 and stock['fifo_queue']:
-                buy_record = stock['fifo_queue'][0]
-                used_quantity = min(remaining_quantity, buy_record['quantity'])
-                
-                # 计算这部分股票的成本（包含买入费用）
-                cost_ratio = used_quantity / buy_record['quantity']
-                unit_cost = buy_record['price']  # 原始币种单位成本
-                buy_fees = buy_record['fees'] * cost_ratio  # 分摊的买入费用
-                
-                cost = unit_cost * used_quantity + buy_fees  # 原始币种成本（含买入费用）
-                total_cost += cost  # 累加总成本
-                
-                # 记录FIFO成本明细
-                fifo_cost_details.append({
-                    'date': buy_record['date'],
-                    'quantity': used_quantity,
-                    'price': unit_cost,
-                    'cost': cost,
-                    'exchange_rate': buy_record['exchange_rate'],
-                    'fees': buy_fees
-                })
-                
-                # 更新或移除买入记录
-                buy_record['quantity'] -= used_quantity
-                if buy_record['quantity'] == 0:
-                    stock['fifo_queue'].pop(0)
-                remaining_quantity -= used_quantity
-            
-            # 计算利润（原始币种）
-            sell_amount = trans.total_amount
-            sell_fees = trans.total_fees
-            net_income = sell_amount - sell_fees
-            profit = net_income - total_cost  # 实际盈亏 = 净卖出金额 - 总成本
-            
-            # 计算利润率
-            profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
-            
-            # 记录卖出交易详情
-            trans_detail = {
-                'transaction_date': trans.transaction_date,
-                'transaction_type': trans.transaction_type,
-                'transaction_code': trans.transaction_code,
-                'total_quantity': trans.total_quantity,
-                'total_amount': trans.total_amount,
-                'total_amount_hkd': trans.total_amount_hkd,
-                'average_price': trans.average_price,
-                'total_fees': trans.total_fees,
-                'exchange_rate': trans.exchange_rate,
-                'fifo_cost_details': fifo_cost_details,
-                'profit': profit,  # 使用实际盈亏值
-                'profit_rate': profit_rate,  # 使用实际盈亏率
-                'total_cost': total_cost  # 添加总成本信息用于验证
-            }
-            
-            stock['transactions'].append(trans_detail)
-            
-            # 更新已实现盈亏(原始币种)
-            stock['realized_profit'] += profit  # 累加实际的盈亏值
-            market_stats[market]['realized_profit'] += profit  # 累加实际的盈亏值
-            
-            # 转换为港币
-            if market != 'HK':
-                profit_hkd = profit * trans.exchange_rate
-                stock['realized_profit_hkd'] += profit_hkd
-                market_stats[market]['realized_profit_hkd'] += profit_hkd
-            else:
-                stock['realized_profit_hkd'] += profit
-                market_stats[market]['realized_profit_hkd'] += profit
+    query = StockTransaction.query.filter_by(user_id=session['user_id'])
+    pagination = query.order_by(StockTransaction.transaction_date.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
     
-    except Exception as e:
-        print(f"Error processing transaction: {str(e)}")
-        raise 
+    return jsonify({
+        'success': True,
+        'data': {
+            'items': [trans.to_dict() for trans in pagination.items],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': pagination.page
+        }
+    }) 

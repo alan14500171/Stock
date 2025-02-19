@@ -6,6 +6,7 @@
       :value="modelValue"
       @input="handleInput"
       @blur="handleBlur"
+      @keydown.enter="handleEnter"
       :placeholder="placeholder"
       :class="{ 'is-invalid': !!error }"
     />
@@ -19,7 +20,10 @@
 import { ref } from 'vue'
 
 const props = defineProps({
-  modelValue: String,
+  modelValue: {
+    type: String,
+    default: ''
+  },
   placeholder: {
     type: String,
     default: 'YYYY-MM-DD'
@@ -32,6 +36,21 @@ const error = ref('')
 const formatDateInput = (value) => {
   if (!value) return ''
   
+  // 处理带连字符的输入（如 "2-5"）
+  if (value.includes('-')) {
+    const parts = value.split('-')
+    if (parts.length === 2) {
+      const month = parts[0].padStart(2, '0')
+      const day = parts[1].padStart(2, '0')
+      const currentYear = new Date().getFullYear()
+      if (isValidDate(currentYear, parseInt(month), parseInt(day))) {
+        return `${currentYear}-${month}-${day}`
+      }
+      return ''
+    }
+  }
+  
+  // 处理纯数字输入
   value = value.replace(/[^\d]/g, '')
   const currentYear = new Date().getFullYear()
   const currentMonth = (new Date().getMonth() + 1)
@@ -103,22 +122,50 @@ const handleInput = (e) => {
   emit('update:modelValue', value)
 }
 
-const handleBlur = (e) => {
-  let value = e.target.value.trim()
-  error.value = ''
-
+const formatAndValidate = (value) => {
   if (!value) {
     emit('update:modelValue', '')
     return
   }
 
-  const formattedDate = formatDateInput(value)
-  if (formattedDate) {
-    emit('update:modelValue', formattedDate)
-  } else {
+  // 如果输入的是纯数字，尝试进行快捷格式化
+  if (/^\d+$/.test(value)) {
+    const formattedDate = formatDateInput(value)
+    if (formattedDate) {
+      emit('update:modelValue', formattedDate)
+      return
+    }
+  }
+
+  // 如果不是标准的日期格式，显示错误
+  if (!value.match(/^\d{4}-\d{2}-\d{2}$/)) {
     error.value = '请输入有效的日期格式'
     emit('update:modelValue', '')
+    return
   }
+
+  // 验证日期是否有效
+  const [year, month, day] = value.split('-').map(Number)
+  if (!isValidDate(year, month, day)) {
+    error.value = '请输入有效的日期'
+    emit('update:modelValue', '')
+    return
+  }
+
+  emit('update:modelValue', value)
+}
+
+const handleBlur = (e) => {
+  let value = e.target.value.trim()
+  error.value = ''
+  formatAndValidate(value)
+}
+
+const handleEnter = (e) => {
+  e.preventDefault()
+  let value = e.target.value.trim()
+  error.value = ''
+  formatAndValidate(value)
 }
 </script>
 

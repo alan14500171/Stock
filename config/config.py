@@ -28,7 +28,7 @@ class DevelopmentConfig(Config):
     """开发环境配置"""
     DEBUG = True
     HOST = '127.0.0.1'
-    PORT = 9009
+    PORT = 9099
     
 class TestingConfig(Config):
     """测试环境配置"""

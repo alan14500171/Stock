@@ -6,7 +6,15 @@ export default defineConfig({
   server: {
     port: 9009,
     proxy: {
+      '/stock': {
+        target: 'http://localhost:9099',
+        changeOrigin: true
+      },
       '/api': {
+        target: 'http://localhost:9099',
+        changeOrigin: true
+      },
+      '/stocks': {
         target: 'http://localhost:9099',
         changeOrigin: true
       }
