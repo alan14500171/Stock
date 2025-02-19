@@ -1,8 +1,10 @@
 from flask import Blueprint, request, session, jsonify
 from functools import wraps
 from models.user import User
+import logging
 
 auth_bp = Blueprint('auth', __name__)
+logger = logging.getLogger(__name__)
 
 def login_required(f):
     """登录验证装饰器"""
@@ -19,35 +21,55 @@ def login_required(f):
 @auth_bp.route('/register', methods=['POST'])
 def register():
     """用户注册API"""
-    data = request.get_json() if request.is_json else request.form
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
+    try:
+        logger.info('开始处理注册请求')
+        logger.info('请求内容类型: %s', request.content_type)
+        logger.info('请求数据: %s', request.get_data())
+        
+        data = request.get_json() if request.is_json else request.form
+        logger.info('解析后的数据: %s', data)
+        
+        username = data.get('username')
+        password = data.get('password')
+        
+        logger.info('用户名: %s', username)
+        
+        if not username or not password:
+            logger.warning('用户名或密码为空')
+            return jsonify({
+                'success': False,
+                'message': '用户名和密码不能为空'
+            }), 400
+        
+        if User.find_by_username(username):
+            logger.warning('用户名已存在: %s', username)
+            return jsonify({
+                'success': False,
+                'message': '用户名已存在'
+            }), 400
+        
+        new_user = User()
+        new_user.username = username
+        new_user.set_password(password)
+        
+        if new_user.save():
+            logger.info('用户注册成功: %s', username)
+            return jsonify({
+                'success': True,
+                'message': '注册成功'
+            })
+        else:
+            logger.error('用户保存失败: %s', username)
+            return jsonify({
+                'success': False,
+                'message': '注册失败'
+            }), 500
+            
+    except Exception as e:
+        logger.error('注册过程发生错误: %s', str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': '用户名和密码不能为空'
-        }), 400
-    
-    if User.find_by_username(username):
-        return jsonify({
-            'success': False,
-            'message': '用户名已存在'
-        }), 400
-    
-    new_user = User()
-    new_user.username = username
-    new_user.set_password(password)
-    
-    if new_user.save():
-        return jsonify({
-            'success': True,
-            'message': '注册成功'
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': '注册失败'
+            'message': f'注册失败: {str(e)}'
         }), 500
 
 @auth_bp.route('/login', methods=['POST'])

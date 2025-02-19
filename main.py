@@ -3,8 +3,16 @@ from config.config import config
 from config.database import db
 from services.exchange_rate import ExchangeRateService
 import os
+import logging
 
 def create_app(config_name='development'):
+    # 配置日志
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
     app = Flask(__name__)
     
     # 加载配置
@@ -22,7 +30,10 @@ def create_app(config_name='development'):
         'port': 3306
     }
     if not db.connect(db_config):
+        logger.error("数据库连接失败")
         raise Exception("数据库连接失败")
+    else:
+        logger.info("数据库连接成功")
     
     # 自定义CORS处理
     @app.after_request

@@ -10,7 +10,6 @@ class User:
         self.id = data.get('id') if data else None
         self.username = data.get('username') if data else None
         self.password_hash = data.get('password_hash') if data else None
-        self.email = data.get('email') if data else None
         self.is_active = data.get('is_active', True) if data else True
         self.created_at = data.get('created_at') if data else datetime.utcnow()
         self.last_login = data.get('last_login') if data else None
@@ -29,12 +28,12 @@ class User:
             # 更新
             sql = """
                 UPDATE users 
-                SET username=%s, password_hash=%s, email=%s, 
+                SET username=%s, password_hash=%s, 
                     is_active=%s, last_login=%s 
                 WHERE id=%s
             """
             params = (
-                self.username, self.password_hash, self.email,
+                self.username, self.password_hash,
                 self.is_active, self.last_login, self.id
             )
             return db.execute(sql, params)
@@ -42,11 +41,11 @@ class User:
             # 新增
             sql = """
                 INSERT INTO users 
-                (username, password_hash, email, is_active, created_at) 
-                VALUES (%s, %s, %s, %s, %s)
+                (username, password_hash, is_active, created_at) 
+                VALUES (%s, %s, %s, %s)
             """
             params = (
-                self.username, self.password_hash, self.email,
+                self.username, self.password_hash,
                 self.is_active, self.created_at
             )
             self.id = db.insert(sql, params)
@@ -63,7 +62,6 @@ class User:
         return {
             'id': self.id,
             'username': self.username,
-            'email': self.email,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None

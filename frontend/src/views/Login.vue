@@ -76,6 +76,8 @@ const route = useRoute()
 const loading = ref(false)
 const error = ref('')
 
+const emit = defineEmits(['login-success'])
+
 const form = reactive({
   username: '',
   password: ''
@@ -94,6 +96,8 @@ const handleLogin = async () => {
     })
     
     if (response.data.success) {
+      // 触发登录成功事件
+      emit('login-success')
       // 登录成功，跳转到之前的页面或默认页面
       const redirect = route.query.redirect || '/profit/stats'
       router.push(redirect)
