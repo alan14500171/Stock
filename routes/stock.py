@@ -1,5 +1,5 @@
 from flask import Blueprint, request, session, jsonify
-from flask_login import login_required
+from routes.auth import login_required
 from config.database import db
 from datetime import datetime
 from services.exchange_rate import ExchangeRateService

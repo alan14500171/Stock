@@ -1,14 +1,27 @@
 from flask import Blueprint, request, session, jsonify
+from functools import wraps
 from models.user import User
-from flask_login import login_user, logout_user, login_required
 
 auth_bp = Blueprint('auth', __name__)
+
+def login_required(f):
+    """登录验证装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({
+                'success': False,
+                'message': '请先登录'
+            }), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
     """用户注册API"""
-    username = request.form.get('username')
-    password = request.form.get('password')
+    data = request.get_json() if request.is_json else request.form
+    username = data.get('username')
+    password = data.get('password')
     
     if not username or not password:
         return jsonify({
@@ -40,8 +53,9 @@ def register():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """用户登录API"""
-    username = request.form.get('username')
-    password = request.form.get('password')
+    data = request.get_json() if request.is_json else request.form
+    username = data.get('username')
+    password = data.get('password')
     
     if not username or not password:
         return jsonify({
@@ -51,7 +65,6 @@ def login():
     
     user = User.find_by_username(username)
     if user and user.check_password(password):
-        login_user(user)
         session['user_id'] = user.id
         user.update_last_login()
         return jsonify({
@@ -70,7 +83,6 @@ def login():
 def logout():
     """退出登录API"""
     try:
-        logout_user()
         session.clear()
         return jsonify({
             'success': True,

@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/auth/login'
+    redirect: '/profit/stats'
   },
   {
     path: '/auth/login',
@@ -82,13 +82,36 @@ router.beforeEach(async (to, from, next) => {
       
       if (!data.is_authenticated) {
         // 未登录，重定向到登录页
-        next({ name: 'Login', query: { redirect: to.fullPath } })
+        next({ 
+          name: 'Login', 
+          query: { redirect: to.fullPath },
+          replace: true 
+        })
         return
       }
     } catch (error) {
       console.error('检查登录状态失败:', error)
-      next({ name: 'Login', query: { redirect: to.fullPath } })
+      next({ 
+        name: 'Login', 
+        query: { redirect: to.fullPath },
+        replace: true 
+      })
       return
+    }
+  } else if (to.name === 'Login' || to.name === 'Register') {
+    // 如果已登录且访问登录/注册页面，重定向到首页
+    try {
+      const response = await fetch('/api/auth/check_login', {
+        credentials: 'include'
+      })
+      const data = await response.json()
+      
+      if (data.is_authenticated) {
+        next({ name: 'ProfitStats', replace: true })
+        return
+      }
+    } catch (error) {
+      console.error('检查登录状态失败:', error)
     }
   }
   

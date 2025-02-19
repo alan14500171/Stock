@@ -87,11 +87,10 @@ const handleRegister = async () => {
   loading.value = true
   
   try {
-    const formData = new FormData()
-    formData.append('username', form.username)
-    formData.append('password', form.password)
-    
-    const response = await axios.post('/api/auth/register', formData)
+    const response = await axios.post('/api/auth/register', {
+      username: form.username,
+      password: form.password
+    })
     
     if (response.data.success) {
       alert('注册成功，请登录')
@@ -101,7 +100,7 @@ const handleRegister = async () => {
     }
   } catch (err) {
     console.error('注册失败:', err)
-    error.value = '注册失败，请稍后重试'
+    error.value = err.response?.data?.message || '注册失败，请稍后重试'
   } finally {
     loading.value = false
   }

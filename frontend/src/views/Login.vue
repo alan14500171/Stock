@@ -88,11 +88,10 @@ const handleLogin = async () => {
   loading.value = true
   
   try {
-    const formData = new FormData()
-    formData.append('username', form.username)
-    formData.append('password', form.password)
-    
-    const response = await axios.post('/api/auth/login', formData)
+    const response = await axios.post('/api/auth/login', {
+      username: form.username,
+      password: form.password
+    })
     
     if (response.data.success) {
       // 登录成功，跳转到之前的页面或默认页面
@@ -103,7 +102,7 @@ const handleLogin = async () => {
     }
   } catch (err) {
     console.error('登录失败:', err)
-    error.value = '登录失败，请稍后重试'
+    error.value = err.response?.data?.message || '登录失败，请稍后重试'
   } finally {
     loading.value = false
   }

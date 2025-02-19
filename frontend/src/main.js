@@ -9,7 +9,9 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 
 // 配置axios
 axios.defaults.baseURL = 'http://127.0.0.1:9099'
-axios.defaults.withCredentials = true // 允许跨域请求携带cookie
+axios.defaults.withCredentials = true
+axios.defaults.headers.common['Content-Type'] = 'application/json'
+axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
 
 // 添加请求拦截器
 axios.interceptors.request.use(
@@ -31,32 +33,10 @@ axios.interceptors.response.use(
   },
   error => {
     if (error.response) {
-      switch (error.response.status) {
-        case 401:
-          // 未登录，重定向到登录页面
-          router.push('/auth/login')
-          break
-        case 403:
-          // 权限不足
-          console.error('权限不足')
-          break
-        case 404:
-          // 请求的资源不存在
-          console.error('请求的资源不存在')
-          break
-        case 500:
-          // 服务器错误
-          console.error('服务器错误')
-          break
-        default:
-          console.error(error.response.data.message || '请求失败')
+      if (error.response.status === 401) {
+        // 未登录或登录过期，重定向到登录页
+        router.push('/auth/login')
       }
-    } else if (error.request) {
-      // 请求已经成功发起，但没有收到响应
-      console.error('无法连接到服务器')
-    } else {
-      // 发送请求时出了点问题
-      console.error('请求配置有误')
     }
     return Promise.reject(error)
   }
