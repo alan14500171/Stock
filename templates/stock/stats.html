@@ -536,11 +536,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 设置初始股票数据
-    const stocks = {{ all_stocks|tojson|safe }};
+    const stocks = JSON.parse('{{ all_stocks|tojson|safe }}');
     stockSelector.setStocks(stocks);
 
     // 如果有预选的股票代码，设置它们
-    const selectedCodes = {{ selected_stock_codes|tojson|safe }};
+    const selectedCodes = JSON.parse('{{ selected_stock_codes|tojson|safe }}');
     if (selectedCodes && selectedCodes.length > 0) {
         stockSelector.setSelectedCodes(selectedCodes);
     }
@@ -960,26 +960,25 @@ function formatDateInput(input) {
     let value = input.value.replace(/\D/g, '');
     const currentYear = new Date().getFullYear();
     
-    // 根据输入长度进行不同处理
-    if (value.length === 4) { // 输入格式：MMDD
+    if (value.length === 4) { // MMDD
         const month = value.substring(0, 2);
         const day = value.substring(2, 4);
         if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
             value = `${currentYear}-${month}-${day}`;
         }
-    } else if (value.length === 3) { // 输入格式：MDD
+    } else if (value.length === 3) { // MDD
         const month = value.substring(0, 1);
         const day = value.substring(1, 3);
         if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
             value = `${currentYear}-0${month}-${day}`;
         }
-    } else if (value.length === 2) { // 输入格式：DD
+    } else if (value.length === 2) { // DD
         const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
         const day = value;
         if (day >= 1 && day <= 31) {
             value = `${currentYear}-${currentMonth}-${day}`;
         }
-    } else if (value.length === 8) { // 输入格式：YYYYMMDD
+    } else if (value.length === 8) { // YYYYMMDD
         const year = value.substring(0, 4);
         const month = value.substring(4, 6);
         const day = value.substring(6, 8);
@@ -988,7 +987,6 @@ function formatDateInput(input) {
         }
     }
     
-    // 更新输入框的值
     if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
         input.value = value;
     }
@@ -1136,11 +1134,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     // 设置初始股票数据
-    const stocks = {{ all_stocks|tojson|safe }};
+    const stocks = JSON.parse('{{ all_stocks|tojson|safe }}');
     stockSelector.setStocks(stocks);
 
     // 如果有预选的股票代码，设置它们
-    const selectedCodes = {{ selected_stock_codes|tojson|safe }};
+    const selectedCodes = JSON.parse('{{ selected_stock_codes|tojson|safe }}');
     if (selectedCodes && selectedCodes.length > 0) {
         stockSelector.setSelectedCodes(selectedCodes);
     }
