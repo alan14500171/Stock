@@ -1466,6 +1466,73 @@ def check_transaction_code():
     
     return jsonify({'exists': exists})
 
+@stock_bp.route('/api/profit')
+@login_required
+def get_profit_stats():
+    """获取盈利统计数据的API"""
+    try:
+        # 获取查询参数
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        market = request.args.get('market')
+        stock_codes = request.args.getlist('stock_codes')
+        
+        # 构建查询
+        query = StockTransaction.query.filter_by(user_id=session['user_id'])
+        
+        if start_date:
+            query = query.filter(StockTransaction.transaction_date >= start_date)
+        if end_date:
+            query = query.filter(StockTransaction.transaction_date <= end_date)
+        if market:
+            query = query.filter_by(market=market)
+        if stock_codes:
+            query = query.filter(StockTransaction.stock_code.in_(stock_codes))
+            
+        # 获取交易记录
+        transactions = query.order_by(StockTransaction.transaction_date).all()
+        
+        # 计算统计数据
+        market_stats, stock_stats = calculate_stats(transactions)
+        
+        # 获取所有相关的股票信息
+        stock_codes_query = db.session.query(
+            StockTransaction.stock_code,
+            StockTransaction.market
+        ).filter_by(user_id=session['user_id']).distinct()
+        
+        all_stocks = []
+        for code, market in stock_codes_query:
+            stock = Stock.query.filter_by(code=code, market=market).first()
+            if stock:
+                all_stocks.append({
+                    'code': stock.code,
+                    'market': stock.market,
+                    'name': stock.name
+                })
+            else:
+                all_stocks.append({
+                    'code': code,
+                    'market': market,
+                    'name': ''
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'market_stats': market_stats,
+                'stock_stats': stock_stats,
+                'all_stocks': all_stocks,
+                'selected_stock_codes': stock_codes
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 def process_transaction(stock, market_stats, trans, market):
     """处理单个交易记录
     
