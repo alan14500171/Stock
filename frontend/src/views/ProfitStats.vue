@@ -56,7 +56,7 @@
           <thead class="table-light">
             <tr>
               <th></th>
-              <th>名称</th>
+              <th>市场</th>
               <th class="text-end">数量</th>
               <th class="text-end">笔数</th>
               <th class="text-end">买入总额</th>
@@ -141,36 +141,19 @@
                     <tr v-if="isStockExpanded(market, stock.code)">
                       <td colspan="13" class="p-0">
                         <div class="transaction-details">
-                          <table class="table table-sm table-bordered mb-0">
-                            <thead class="table-light">
-                              <tr>
-                                <th>交易日期</th>
-                                <th>交易编号</th>
-                                <th>类型</th>
-                                <th class="text-end">数量</th>
-                                <th class="text-end">价格</th>
-                                <th class="text-end">金额</th>
-                                <th class="text-end">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
-                              </tr>
-                            </thead>
+                          <table class="table table-sm mb-0">
                             <tbody>
                               <template v-if="transactionDetails[`${market}-${stock.code}`]">
                                 <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
-                                  <td>{{ formatDate(detail.transaction_date) }}</td>
-                                  <td>{{ detail.transaction_code }}</td>
-                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
-                                  <td class="text-end">
-                                    <template v-for="(d, index) in detail.details" :key="index">
-                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
-                                    </template>
-                                  </td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                  <td class="transaction-info">{{ formatDate(detail.transaction_date) }} <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</span> <span class="transaction-code">{{ detail.transaction_code }}</span></td>
+                                  <td class="quantity-price">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
+                                  <td class="text-end amount">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end amount">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end fees">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
                                 </tr>
                               </template>
                               <tr v-else>
@@ -227,36 +210,19 @@
                     <tr v-if="isStockExpanded(market, stock.code)">
                       <td colspan="13" class="p-0">
                         <div class="transaction-details">
-                          <table class="table table-sm table-bordered mb-0">
-                            <thead class="table-light">
-                              <tr>
-                                <th>交易日期</th>
-                                <th>交易编号</th>
-                                <th>类型</th>
-                                <th class="text-end">数量</th>
-                                <th class="text-end">价格</th>
-                                <th class="text-end">金额</th>
-                                <th class="text-end">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
-                              </tr>
-                            </thead>
+                          <table class="table table-sm mb-0">
                             <tbody>
                               <template v-if="transactionDetails[`${market}-${stock.code}`]">
                                 <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
-                                  <td>{{ formatDate(detail.transaction_date) }}</td>
-                                  <td>{{ detail.transaction_code }}</td>
-                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
-                                  <td class="text-end">
-                                    <template v-for="(d, index) in detail.details" :key="index">
-                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
-                                    </template>
-                                  </td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                  <td class="transaction-info">{{ formatDate(detail.transaction_date) }} <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</span> <span class="transaction-code">{{ detail.transaction_code }}</span></td>
+                                  <td class="quantity-price">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
+                                  <td class="text-end amount">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end amount">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end fees">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
+                                  <td></td>
                                 </tr>
                               </template>
                               <tr v-else>
@@ -526,6 +492,46 @@ onMounted(() => {
   background-color: #f8f9fa;
 }
 
+/* 层级缩进样式 */
+/* 第一层级 - 市场行 */
+.market-row td:first-child {
+  padding-left: 0.1rem !important;
+  position: relative;
+  width: 40px;
+}
+
+/* 第二层级 - 持仓/已清仓分组 */
+.holding-group-row td:first-child,
+.closed-group-row td:first-child {
+  padding-left: 0.5rem !important;
+  position: relative;
+  width: 40px;
+}
+
+.holding-group-row td:nth-child(2),
+.closed-group-row td:nth-child(2) {
+  padding-left: 2rem !important;/* 第二层级 - 修改缩进*/
+}
+
+/* 第三层级 - 股票行 */
+.stock-row td:first-child {
+  padding-left: 0.5rem !important;
+  position: relative;
+  width: 40px;
+}
+
+.stock-row td:nth-child(2) {
+  padding-left: 1rem !important;/* 第三层级 - 修改缩进*/
+}
+
+/* 第四层级 - 交易明细 */
+.transaction-details {
+  padding-left: 5rem !important; /* 第四层级 - 修改缩进*/
+  background-color: #ffffff;
+  padding: 0.5rem;
+}
+
+/* 按钮样式 */
 .btn-sm {
   padding: 0.25rem 0.5rem;
   min-width: 28px;
@@ -539,7 +545,6 @@ onMounted(() => {
   transition: all 0.2s;
   margin: 2px;
   position: relative;
-  z-index: 1;
 }
 
 .btn-sm:hover {
@@ -558,11 +563,16 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s;
+  transition: all 0.2s ease-in-out;
   position: relative;
   z-index: 2;
   font-weight: bold;
   stroke-width: 1px;
+}
+
+.rotate-90 {
+  transform: rotate(90deg);
+  color: #0d6efd !important;
 }
 
 /* 市场行按钮样式 */
@@ -576,11 +586,11 @@ onMounted(() => {
   width: 20px;
   height: 20px;
   font-weight: bold;
+  transition: all 0.2s ease-in-out;
 }
 
 .market-row .btn-sm .bi-chevron-right {
   color: #495057;
-  transform: rotate(0deg);
 }
 
 /* 分组行按钮样式 */
@@ -588,6 +598,7 @@ onMounted(() => {
 .closed-group-row .btn-sm {
   background: transparent;
   border: none;
+  transform: translateX(0.8rem);
 }
 
 .holding-group-row .btn-sm .bi,
@@ -596,18 +607,19 @@ onMounted(() => {
   width: 18px;
   height: 18px;
   font-weight: bold;
+  transition: all 0.2s ease-in-out;
 }
 
 .holding-group-row .btn-sm .bi-chevron-right,
 .closed-group-row .btn-sm .bi-chevron-right {
   color: #495057;
-  transform: rotate(0deg);
 }
 
 /* 股票行按钮样式 */
 .stock-row .btn-sm {
   background: transparent;
   border: none;
+  transform: translateX(1.2rem);
 }
 
 .stock-row .btn-sm .bi {
@@ -615,11 +627,20 @@ onMounted(() => {
   width: 16px;
   height: 16px;
   font-weight: bold;
+  transition: all 0.2s ease-in-out;
 }
 
 .stock-row .btn-sm .bi-chevron-right {
   color: #495057;
-  transform: rotate(0deg);
+}
+
+/* 按钮悬停效果 */
+.btn-sm:hover .bi-chevron-right {
+  color: #0d6efd;
+}
+
+.btn-sm:hover .rotate-90 {
+  color: #0a58ca !important;
 }
 
 /* 交易明细表格样式 */
@@ -634,6 +655,32 @@ onMounted(() => {
 
 .transaction-details td {
   background-color: #ffffff;
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #dee2e6;
+  line-height: 1.2;
+  vertical-align: middle;
+  font-size: 12px;
+}
+
+.transaction-details tr:last-child td {
+  border-bottom: none;
+}
+
+/* 交易明细行悬停效果 */
+.transaction-details tr {
+  transition: background-color 0.2s;
+  height: 8px;
+}
+
+.transaction-details tr:hover td {
+  background-color: #f8f9fa;
+}
+
+.transaction-details tr.selected td {
+  background-color: #e9ecef;
 }
 
 /* 旋转动画 */
@@ -667,5 +714,68 @@ onMounted(() => {
 
 .small {
   font-size: 0.875rem;
+}
+
+/* 交易类型徽章样式 */
+.transaction-type-badge {
+  display: inline-block;
+  width: 30px;
+  height: 15px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 450;
+  margin: 0 6px;
+}
+
+.transaction-type-badge.buy {
+  background-color: #e6071d;
+  color: #ffffff;
+}
+
+.transaction-type-badge.sell {
+  background-color: #549359;
+  color: #ffffff;
+}
+
+/* 交易编号样式 */
+.transaction-code {
+  font-size: 10px;
+  color: #6c757d;
+  margin-left: 4px;
+}
+
+/* 数量@单价列样式 */
+.quantity-price {
+  min-width: 300px;
+  padding-left: 1rem !important;
+  text-align: left !important;
+  font-size: 12px;
+}
+
+/* 交易信息列样式 */
+.transaction-info {
+  min-width: 200px;
+  padding-left: 1rem !important;
+  font-size: 12px;
+}
+
+/* 金额列样式 */
+.amount {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+/* 价格列样式 */
+.price {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+/* 费用列样式 */
+.fees {
+  min-width: 100px;
+  font-size: 12px;
 }
 </style> 
