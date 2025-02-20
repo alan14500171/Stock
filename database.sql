@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS stocks (
     full_name VARCHAR(200),
     industry VARCHAR(50),
     currency VARCHAR(3),
+    current_price DECIMAL(15,4),
+    price_updated_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uix_code_market (code, market)

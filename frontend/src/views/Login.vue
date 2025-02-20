@@ -91,8 +91,12 @@ const handleLogin = async () => {
   
   try {
     const response = await axios.post('/api/auth/login', {
-      username: form.username,
-      password: form.password
+      username: form.username.trim(),
+      password: form.password.trim()
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
     })
     
     if (response.data.success) {
@@ -106,7 +110,11 @@ const handleLogin = async () => {
     }
   } catch (err) {
     console.error('登录失败:', err)
-    error.value = err.response?.data?.message || '登录失败，请稍后重试'
+    if (err.response) {
+      error.value = err.response.data.message || '用户名或密码错误'
+    } else {
+      error.value = '登录失败，请稍后重试'
+    }
   } finally {
     loading.value = false
   }

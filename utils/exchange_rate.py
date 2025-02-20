@@ -1,4 +1,5 @@
-from models import db, ExchangeRate
+from config.database import db
+from models import ExchangeRate
 from datetime import datetime, timedelta
 import requests
 import json

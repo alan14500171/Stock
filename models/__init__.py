@@ -4,5 +4,8 @@
 """
 
 from .user import User
+from .stock import Stock
+from .transaction import StockTransaction
+from .exchange_rate import ExchangeRate
 
-__all__ = ['User'] 
+__all__ = ['User', 'Stock', 'StockTransaction', 'ExchangeRate'] 

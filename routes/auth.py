@@ -75,30 +75,51 @@ def register():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """用户登录API"""
-    data = request.get_json() if request.is_json else request.form
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
+    try:
+        logger.info('开始处理登录请求')
+        logger.info('请求内容类型: %s', request.content_type)
+        logger.info('请求数据: %s', request.get_data())
+        
+        data = request.get_json() if request.is_json else request.form
+        logger.info('解析后的数据: %s', data)
+        
+        username = data.get('username')
+        password = data.get('password')
+        
+        logger.info('用户名: %s', username)
+        
+        if not username or not password:
+            logger.warning('用户名或密码为空')
+            return jsonify({
+                'success': False,
+                'message': '用户名和密码不能为空'
+            }), 400
+        
+        user = User.find_by_username(username)
+        logger.info('查找用户结果: %s', bool(user))
+        
+        if user and user.check_password(password):
+            session['user_id'] = user.id
+            user.update_last_login()
+            logger.info('用户登录成功: %s', username)
+            return jsonify({
+                'success': True,
+                'message': '登录成功',
+                'user': user.to_dict()
+            })
+        
+        logger.warning('用户名或密码错误: %s', username)
         return jsonify({
             'success': False,
-            'message': '用户名和密码不能为空'
-        }), 400
-    
-    user = User.find_by_username(username)
-    if user and user.check_password(password):
-        session['user_id'] = user.id
-        user.update_last_login()
+            'message': '用户名或密码错误'
+        }), 401
+            
+    except Exception as e:
+        logger.error('登录过程发生错误: %s', str(e), exc_info=True)
         return jsonify({
-            'success': True,
-            'message': '登录成功',
-            'user': user.to_dict()
-        })
-    
-    return jsonify({
-        'success': False,
-        'message': '用户名或密码错误'
-    }), 401
+            'success': False,
+            'message': f'登录失败: {str(e)}'
+        }), 500
 
 @auth_bp.route('/logout')
 @login_required

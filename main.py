@@ -1,4 +1,4 @@
-from flask import Flask, make_response, request
+from flask import Flask, make_response, request, jsonify
 from config.config import config
 from config.database import db
 from services.exchange_rate import ExchangeRateService
@@ -18,7 +18,11 @@ def create_app(config_name='development'):
     # 加载配置
     app.config.from_object(config[config_name])
     
-    # 设置 session 密钥
+    # 设置 session 配置
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = False  # 开发环境设置为False
+    app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # session过期时间
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.secret_key = os.environ.get('SECRET_KEY') or 'dev'
     
     # 初始化数据库连接
@@ -45,6 +49,7 @@ def create_app(config_name='development'):
             'http://localhost:9099',
             'http://127.0.0.1:9099'
         ]
+        
         if origin in allowed_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
@@ -57,6 +62,22 @@ def create_app(config_name='development'):
                 response.status_code = 200
                 
         return response
+    
+    # 错误处理
+    @app.errorhandler(500)
+    def internal_error(error):
+        logger.error(f"服务器错误: {error}")
+        return jsonify({
+            'success': False,
+            'message': '服务器内部错误'
+        }), 500
+    
+    @app.errorhandler(404)
+    def not_found_error(error):
+        return jsonify({
+            'success': False,
+            'message': '请求的资源不存在'
+        }), 404
     
     # 初始化汇率服务
     exchange_rate_service = ExchangeRateService()

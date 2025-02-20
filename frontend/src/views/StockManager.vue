@@ -302,7 +302,7 @@ const fetchData = async (page = 1) => {
     if (searchForm.market) params.append('market', searchForm.market)
     if (searchForm.keyword) params.append('keyword', searchForm.keyword)
     
-    const response = await axios.get(`/api/stocks?${params.toString()}`)
+    const response = await axios.get(`/api/stock/stocks?${params.toString()}`)
     if (response.data.success) {
       stocks.value = response.data.data.items.map(stock => ({
         ...stock,

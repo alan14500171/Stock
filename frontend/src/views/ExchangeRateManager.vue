@@ -267,7 +267,7 @@ const fetchRates = async () => {
     params.append('page', currentPage.value)
     params.append('per_page', pageSize)
     
-    const response = await axios.get(`/stock/exchange_rates?${params.toString()}`)
+    const response = await axios.get(`/api/stock/exchange_rates?${params.toString()}`)
     if (response.data.success) {
       exchangeRates.value = response.data.data.items
       totalPages.value = Math.ceil(response.data.data.total / pageSize)
@@ -285,7 +285,7 @@ const fetchMissingRates = async () => {
   
   loading.value = true
   try {
-    const response = await axios.post('/stock/exchange_rates/fetch_missing')
+    const response = await axios.post('/api/stock/exchange_rates/fetch_missing')
     if (response.data.success) {
       // 重新加载数据
       await fetchRates()
@@ -378,8 +378,8 @@ const submitForm = async () => {
   submitting.value = true
   try {
     const url = isEdit.value 
-      ? `/stock/exchange_rates/edit/${form.id}`
-      : '/stock/exchange_rates/add'
+      ? `/api/stock/exchange_rates/edit/${form.id}`
+      : '/api/stock/exchange_rates/add'
     
     const response = await axios.post(url, {
       rate_date: form.rateDate,
@@ -404,7 +404,7 @@ const confirmDelete = async (rate) => {
   if (!confirm('确定要删除这条汇率记录吗？')) return
   
   try {
-    const response = await axios.post(`/stock/exchange_rates/delete/${rate.id}`)
+    const response = await axios.post(`/api/stock/exchange_rates/delete/${rate.id}`)
     if (response.data.success) {
       await fetchRates()
     }

@@ -1,23 +1,52 @@
 from datetime import datetime
-from .base import db
+from config.database import db
 
-class Stock(db.Model):
+class Stock:
     """股票信息表"""
-    __tablename__ = 'stocks'
+    def __init__(self, data=None):
+        self.id = data.get('id') if data else None
+        self.code = data.get('code') if data else None
+        self.market = data.get('market') if data else None
+        self.name = data.get('name') if data else None
+        self.full_name = data.get('full_name') if data else None
+        self.industry = data.get('industry') if data else None
+        self.currency = data.get('currency') if data else None
+        self.current_price = data.get('current_price') if data else None
+        self.price_updated_at = data.get('price_updated_at') if data else None
+        self.created_at = data.get('created_at') if data else datetime.utcnow()
+        self.updated_at = data.get('updated_at') if data else datetime.utcnow()
     
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False)  # 股票代码
-    market = db.Column(db.String(10), nullable=False)  # 市场：HK或USA
-    name = db.Column(db.String(100), nullable=False)  # 股票名称（中文）
-    full_name = db.Column(db.String(200))  # 公司全称
-    industry = db.Column(db.String(50))  # 行业
-    currency = db.Column(db.String(3))  # 交易货币
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    __table_args__ = (
-        db.UniqueConstraint('code', 'market', name='uix_code_market'),
-    )
+    def save(self):
+        """保存或更新股票信息"""
+        if self.id:
+            # 更新
+            sql = """
+                UPDATE stocks 
+                SET code = %s, market = %s, name = %s,
+                    full_name = %s, industry = %s, currency = %s,
+                    current_price = %s, price_updated_at = %s,
+                    updated_at = %s
+                WHERE id = %s
+            """
+            params = (self.code, self.market, self.name,
+                     self.full_name, self.industry, self.currency,
+                     self.current_price, self.price_updated_at,
+                     datetime.utcnow(), self.id)
+            return db.execute(sql, params)
+        else:
+            # 新增
+            sql = """
+                INSERT INTO stocks 
+                (code, market, name, full_name, industry, currency,
+                 current_price, price_updated_at, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            params = (self.code, self.market, self.name,
+                     self.full_name, self.industry, self.currency,
+                     self.current_price, self.price_updated_at,
+                     self.created_at, self.updated_at)
+            self.id = db.insert(sql, params)
+            return bool(self.id)
     
     def to_dict(self):
         return {
@@ -28,19 +57,27 @@ class Stock(db.Model):
             'full_name': self.full_name,
             'industry': self.industry,
             'currency': self.currency,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'current_price': float(self.current_price) if self.current_price else None,
+            'price_updated_at': self.price_updated_at.isoformat() if isinstance(self.price_updated_at, datetime) else self.price_updated_at,
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+            'updated_at': self.updated_at.isoformat() if isinstance(self.updated_at, datetime) else self.updated_at
         }
         
     @classmethod
     def find_by_code_and_market(cls, code, market):
         """根据股票代码和市场查找股票"""
-        return cls.query.filter_by(code=code, market=market).first()
+        sql = "SELECT * FROM stocks WHERE code = %s AND market = %s"
+        data = db.fetch_one(sql, (code, market))
+        return cls(data) if data else None
         
     @classmethod
     def get_all_by_market(cls, market=None):
         """获取指定市场的所有股票"""
-        query = cls.query
+        sql = "SELECT * FROM stocks"
+        params = []
         if market:
-            query = query.filter_by(market=market)
-        return query.order_by(cls.market, cls.code).all() 
+            sql += " WHERE market = %s"
+            params.append(market)
+        sql += " ORDER BY market, code"
+        data = db.fetch_all(sql, params)
+        return [cls(item) for item in data] 

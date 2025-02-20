@@ -1,21 +1,15 @@
 from datetime import datetime
-from .base import db
+from config.database import db
 
-class ExchangeRate(db.Model):
+class ExchangeRate:
     """汇率模型"""
-    __tablename__ = 'exchange_rates'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    currency = db.Column(db.String(10), nullable=False, index=True)
-    rate = db.Column(db.Float, nullable=False)
-    rate_date = db.Column(db.Date, nullable=False, index=True)
-    source = db.Column(db.String(50))  # 数据来源
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # 添加唯一约束
-    __table_args__ = (
-        db.UniqueConstraint('currency', 'rate_date', name='uix_currency_date'),
-    )
+    def __init__(self, data=None):
+        self.id = data.get('id') if data else None
+        self.currency = data.get('currency') if data else None
+        self.rate = data.get('rate') if data else None
+        self.rate_date = data.get('rate_date') if data else None
+        self.source = data.get('source') if data else None
+        self.created_at = data.get('created_at') if data else datetime.utcnow()
     
     def __repr__(self):
         return f'<ExchangeRate {self.currency}@{self.rate_date}>'
@@ -25,19 +19,43 @@ class ExchangeRate(db.Model):
         """根据货币和日期查找汇率记录"""
         try:
             rate_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            return cls.query.filter_by(
-                currency=currency,
-                rate_date=rate_date
-            ).first()
+            sql = "SELECT * FROM exchange_rates WHERE currency = %s AND rate_date = %s"
+            data = db.fetch_one(sql, (currency, rate_date))
+            return cls(data) if data else None
         except:
             return None
+            
+    def save(self):
+        """保存或更新汇率记录"""
+        if self.id:
+            # 更新
+            sql = """
+                UPDATE exchange_rates 
+                SET currency = %s, rate = %s, rate_date = %s,
+                    source = %s
+                WHERE id = %s
+            """
+            params = (self.currency, self.rate, self.rate_date,
+                     self.source, self.id)
+            return db.execute(sql, params)
+        else:
+            # 新增
+            sql = """
+                INSERT INTO exchange_rates 
+                (currency, rate, rate_date, source, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            params = (self.currency, self.rate, self.rate_date,
+                     self.source, self.created_at)
+            self.id = db.insert(sql, params)
+            return bool(self.id)
             
     def to_dict(self):
         return {
             'id': self.id,
             'currency': self.currency,
-            'rate': self.rate,
-            'rate_date': self.rate_date.isoformat(),
+            'rate': float(self.rate) if self.rate else None,
+            'rate_date': self.rate_date.isoformat() if isinstance(self.rate_date, datetime) else self.rate_date,
             'source': self.source,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at
         } 
