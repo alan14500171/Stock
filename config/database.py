@@ -21,6 +21,7 @@ class Database:
                 except:
                     self.connection.close()
                 
+            # 创建基本连接
             self.connection = pymysql.connect(
                 host=config.get('host', '172.16.0.109'),
                 user=config.get('user', 'root'),
@@ -29,14 +30,21 @@ class Database:
                 port=config.get('port', 3306),
                 charset='utf8mb4',
                 cursorclass=DictCursor,
-                autocommit=False,
+                autocommit=True,  # 修改为自动提交
                 connect_timeout=10,
                 read_timeout=30,
                 write_timeout=30,
                 max_allowed_packet=16*1024*1024,
-                program_name='StockApp',
-                init_command='SET SESSION time_zone="+8:00"'
+                program_name='StockApp'
             )
+            
+            # 单独执行每个初始化命令
+            with self.connection.cursor() as cursor:
+                cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'")
+                cursor.execute("SET SESSION time_zone='+8:00'")
+                cursor.execute("SET SESSION group_concat_max_len=1000000")
+                cursor.execute("SET SESSION windowing_use_high_precision=1")
+            
             return True
         except Exception as e:
             logger.error(f"数据库连接失败: {str(e)}")
@@ -116,10 +124,27 @@ class Database:
             cursor = self.get_cursor()
             if not cursor:
                 return []
+            
+            # 添加调试日志
+            logger.debug(f"执行SQL: {sql}")
+            logger.debug(f"参数: {params}")
+            
+            # 重新设置会话变量
+            cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'")
+            cursor.execute("SET SESSION windowing_use_high_precision = 1")
+            
+            # 执行实际查询
             cursor.execute(sql, params or ())
-            return cursor.fetchall()
+            result = cursor.fetchall()
+            
+            # 添加结果日志
+            logger.debug(f"查询结果数量: {len(result)}")
+            return result
+            
         except Exception as e:
             logger.error(f"查询失败: {str(e)}")
+            logger.error(f"SQL: {sql}")
+            logger.error(f"参数: {params}")
             return []
         finally:
             if cursor:

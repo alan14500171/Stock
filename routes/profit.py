@@ -24,18 +24,18 @@ def get_profit_stats():
         market = request.args.get('market')
 
         # 构建查询条件
-        params = [user_id]
+        base_params = [user_id]
         conditions = ["t.user_id = %s"]
         
         if start_date:
             conditions.append("t.transaction_date >= %s")
-            params.append(start_date)
+            base_params.append(start_date)
         if end_date:
             conditions.append("t.transaction_date <= %s")
-            params.append(end_date)
+            base_params.append(end_date)
         if market:
             conditions.append("t.market = %s")
-            params.append(market)
+            base_params.append(market)
 
         where_clause = " AND ".join(conditions)
 
@@ -153,17 +153,17 @@ def get_profit_stats():
                 CASE WHEN quantity > 0 THEN quantity * current_price * current_rate ELSE 0 END as market_value,
                 CASE 
                     WHEN quantity > 0 THEN 
-                        quantity * current_price * current_rate - total_buy_hkd + total_sell_hkd - total_fees_hkd
+                        quantity * current_price * current_rate - total_buy_hkd + total_sell_hkd - total_fees_hkd - total_buy_hkd
                     ELSE 
-                        total_sell_hkd - total_buy_hkd - total_fees_hkd
+                        total_sell_hkd - total_buy_hkd - total_fees_hkd - total_buy_hkd
                 END as total_profit,
                 CASE 
                     WHEN total_buy_hkd > 0 THEN 
                         (CASE 
                             WHEN quantity > 0 THEN 
-                                (quantity * current_price * current_rate - total_buy_hkd + total_sell_hkd - total_fees_hkd) / total_buy_hkd * 100
+                                (quantity * current_price * current_rate - total_buy_hkd + total_sell_hkd - total_fees_hkd - total_buy_hkd) / total_buy_hkd * 100
                             ELSE 
-                                (total_sell_hkd - total_buy_hkd - total_fees_hkd) / total_buy_hkd * 100
+                                (total_sell_hkd - total_buy_hkd - total_fees_hkd - total_buy_hkd) / total_buy_hkd * 100
                         END)
                     ELSE NULL
                 END as profit_rate,
@@ -173,11 +173,62 @@ def get_profit_stats():
 
         # 获取交易明细数据
         details_sql = f"""
+            WITH running_totals AS (
+                SELECT 
+                    t.*,
+                    s.name as stock_name,
+                    -- 使用变量跟踪数量和成本
+                    @prev_qty := @qty as prev_qty,
+                    @qty := IF(t.transaction_type = 'buy', 
+                             @qty + t.total_quantity, 
+                             @qty - t.total_quantity) as running_quantity,
+                    
+                    -- 使用变量跟踪平均成本
+                    @prev_avg_cost := IF(@qty = 0, 0, @avg_cost) as prev_avg_cost,
+                    @avg_cost := IF(t.transaction_type = 'buy',
+                                  IF(@prev_qty = 0,
+                                     (t.total_amount + (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)) / t.total_quantity,
+                                     (@prev_qty * @prev_avg_cost + t.total_amount + (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)) / @qty),
+                                  @prev_avg_cost) as avg_cost,
+                    
+                    -- 计算每笔交易的盈亏
+                    CASE 
+                        WHEN t.transaction_type = 'sell' THEN 
+                            t.total_amount - (t.total_quantity * @prev_avg_cost) - 
+                            (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)
+                        ELSE NULL 
+                    END as transaction_profit,
+                    
+                    -- 计算汇率转换后的金额
+                    t.total_amount * COALESCE(
+                        (SELECT rate FROM exchange_rates 
+                         WHERE currency = t.market 
+                         AND rate_date <= t.transaction_date 
+                         ORDER BY rate_date DESC LIMIT 1), 
+                        1
+                    ) as total_amount_hkd,
+                    
+                    -- 计算汇率转换后的费用
+                    (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee) * 
+                    COALESCE(
+                        (SELECT rate FROM exchange_rates 
+                         WHERE currency = t.market 
+                         AND rate_date <= t.transaction_date 
+                         ORDER BY rate_date DESC LIMIT 1), 
+                        1
+                    ) as total_fees_hkd
+                FROM 
+                    (SELECT @qty := 0, @prev_qty := 0, @avg_cost := 0, @prev_avg_cost := 0) vars,
+                    stock_transactions t
+                    LEFT JOIN stocks s ON t.stock_code = s.code AND t.market = s.market
+                WHERE {where_clause}
+                ORDER BY t.transaction_date ASC, t.created_at ASC
+            )
             SELECT 
                 t.id,
                 t.market,
                 t.stock_code,
-                s.name as stock_name,
+                t.stock_name,
                 t.transaction_type,
                 t.transaction_date,
                 t.transaction_code,
@@ -189,35 +240,40 @@ def get_profit_stats():
                 t.transaction_levy,
                 t.trading_fee,
                 t.deposit_fee,
-                t.total_amount * COALESCE(
-                    (SELECT rate FROM exchange_rates 
-                     WHERE currency = t.market 
-                     AND rate_date <= t.transaction_date 
-                     ORDER BY rate_date DESC LIMIT 1), 
-                    1
-                ) as total_amount_hkd,
-                (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee) * 
-                COALESCE(
-                    (SELECT rate FROM exchange_rates 
-                     WHERE currency = t.market 
-                     AND rate_date <= t.transaction_date 
-                     ORDER BY rate_date DESC LIMIT 1), 
-                    1
-                ) as total_fees_hkd,
-                td.quantity as detail_quantity,
-                td.price as detail_price,
-                td.quantity * td.price as detail_amount
-            FROM stock_transactions t
-            LEFT JOIN stocks s ON t.stock_code = s.code AND t.market = s.market
+                t.total_amount_hkd,
+                t.total_fees_hkd,
+                t.transaction_profit,
+                GROUP_CONCAT(
+                    CONCAT(
+                        COALESCE(td.quantity, ''),
+                        '@',
+                        COALESCE(td.price, ''),
+                        '@',
+                        COALESCE(td.quantity * td.price, '')
+                    ) ORDER BY td.id ASC
+                ) as detail_info,
+                t.unit_cost,
+                t.running_quantity as current_quantity,
+                t.avg_cost as current_average_cost
+            FROM running_totals t
             LEFT JOIN stock_transaction_details td ON t.id = td.transaction_id
-            WHERE {where_clause}
-            ORDER BY t.transaction_date DESC, t.id DESC, td.id ASC
+            GROUP BY 
+                t.id, t.market, t.stock_code, t.stock_name, t.transaction_type,
+                t.transaction_date, t.transaction_code, t.total_amount, t.total_quantity,
+                t.exchange_rate, t.broker_fee, t.stamp_duty, t.transaction_levy,
+                t.trading_fee, t.deposit_fee, t.total_amount_hkd, t.total_fees_hkd,
+                t.running_quantity, t.avg_cost, t.prev_avg_cost, t.transaction_profit
+            ORDER BY t.transaction_date DESC, t.created_at DESC
         """
 
         # 执行查询
-        market_stats = db.fetch_all(market_sql, params)
-        stock_stats = db.fetch_all(stock_sql, params)
-        transaction_details = db.fetch_all(details_sql, params)
+        market_params = base_params.copy()
+        stock_params = base_params.copy()
+        details_params = base_params.copy()  # 修改这里，不再重复参数
+
+        market_stats = db.fetch_all(market_sql, market_params)
+        stock_stats = db.fetch_all(stock_sql, stock_params)
+        transaction_details = db.fetch_all(details_sql, details_params)
 
         # 处理市场统计数据
         market_stats_dict = {}
@@ -250,11 +306,13 @@ def get_profit_stats():
             if market in market_stats_dict:
                 market_stats_dict[market]['market_value'] += market_value
                 market_stats_dict[market]['total_profit'] += total_profit
-                if market_stats_dict[market]['total_buy_hkd'] > 0:
+                total_buy_hkd = market_stats_dict[market]['total_buy_hkd']
+                if total_buy_hkd and total_buy_hkd > 0:  # 确保不为零或None
                     market_stats_dict[market]['profit_rate'] = (
-                        market_stats_dict[market]['total_profit'] / 
-                        market_stats_dict[market]['total_buy_hkd'] * 100
+                        market_stats_dict[market]['total_profit'] / total_buy_hkd * 100
                     )
+                else:
+                    market_stats_dict[market]['profit_rate'] = None
 
             # 股票统计
             stock_stats_dict[f"{market}-{stock_code}"] = {
@@ -280,7 +338,6 @@ def get_profit_stats():
 
         # 处理交易明细数据
         transaction_details_dict = {}
-        current_transaction = None
         
         for detail in transaction_details:
             market = detail['market']
@@ -290,33 +347,46 @@ def get_profit_stats():
             if key not in transaction_details_dict:
                 transaction_details_dict[key] = []
             
-            transaction_id = detail['id']
-            if not current_transaction or current_transaction['id'] != transaction_id:
-                current_transaction = {
-                    'id': transaction_id,
-                    'transaction_code': detail['transaction_code'],
-                    'transaction_type': detail['transaction_type'].upper(),
-                    'transaction_date': detail['transaction_date'].isoformat() if detail['transaction_date'] else None,
-                    'total_amount': float(detail['total_amount'] or 0),
-                    'total_amount_hkd': float(detail['total_amount_hkd'] or 0),
-                    'total_quantity': float(detail['total_quantity'] or 0),
-                    'exchange_rate': float(detail['exchange_rate'] or 1),
-                    'broker_fee': float(detail['broker_fee'] or 0),
-                    'stamp_duty': float(detail['stamp_duty'] or 0),
-                    'transaction_levy': float(detail['transaction_levy'] or 0),
-                    'trading_fee': float(detail['trading_fee'] or 0),
-                    'deposit_fee': float(detail['deposit_fee'] or 0),
-                    'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
-                    'details': []
-                }
-                transaction_details_dict[key].append(current_transaction)
+            # 处理交易日期
+            transaction_date = detail['transaction_date']
+            formatted_date = transaction_date.strftime('%Y-%m-%dT%H:%M:%S') if transaction_date else None
             
-            if detail['detail_quantity'] is not None:
-                current_transaction['details'].append({
-                    'quantity': float(detail['detail_quantity'] or 0),
-                    'price': float(detail['detail_price'] or 0),
-                    'amount': float(detail['detail_amount'] or 0)
-                })
+            # 创建交易记录
+            transaction = {
+                'id': detail['id'],
+                'transaction_code': detail['transaction_code'],
+                'transaction_type': detail['transaction_type'].upper(),
+                'transaction_date': formatted_date,
+                'total_amount': float(detail['total_amount'] or 0),
+                'total_amount_hkd': float(detail['total_amount_hkd'] or 0),
+                'total_quantity': float(detail['total_quantity'] or 0),
+                'unit_price': float(detail['total_amount'] or 0) / float(detail['total_quantity'] or 1),
+                'exchange_rate': float(detail['exchange_rate'] or 1),
+                'broker_fee': float(detail['broker_fee'] or 0),
+                'stamp_duty': float(detail['stamp_duty'] or 0),
+                'transaction_levy': float(detail['transaction_levy'] or 0),
+                'trading_fee': float(detail['trading_fee'] or 0),
+                'deposit_fee': float(detail['deposit_fee'] or 0),
+                'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
+                'unit_cost': float(detail['prev_avg_cost'] or 0),
+                'current_quantity': float(detail['running_quantity'] or 0),
+                'current_average_cost': float(detail['avg_cost'] or 0),
+                'transaction_profit': float(detail['transaction_profit'] or 0),
+                'details': []
+            }
+            
+            # 处理明细数据
+            if detail['detail_info']:
+                for detail_str in detail['detail_info'].split(','):
+                    quantity, price, amount = detail_str.split('@')
+                    if quantity and price and amount:
+                        transaction['details'].append({
+                            'quantity': float(quantity),
+                            'price': float(price),
+                            'amount': float(amount)
+                        })
+            
+            transaction_details_dict[key].append(transaction)
 
         return jsonify({
             'success': True,

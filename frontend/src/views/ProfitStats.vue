@@ -142,18 +142,54 @@
                       <td colspan="13" class="p-0">
                         <div class="transaction-details">
                           <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th class="transaction-info">交易日期</th>
+                                <th class="quantity-price">数量@单价</th>
+                                <th class="text-end amount">买入金额</th>
+                                <th class="text-end amount">卖出金额</th>
+                                <th class="text-end cost">成本价</th>
+                                <th class="text-end fees">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                                <th class="text-end">盈亏</th>
+                              </tr>
+                            </thead>
                             <tbody>
                               <template v-if="transactionDetails[`${market}-${stock.code}`]">
                                 <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
-                                  <td class="transaction-info">{{ formatDate(detail.transaction_date) }} <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</span> <span class="transaction-code">{{ detail.transaction_code }}</span></td>
-                                  <td class="quantity-price">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
-                                  <td class="text-end amount">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
-                                  <td class="text-end amount">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
-                                  <td class="text-end fees">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td></td>
-                                  <td></td>
-                                  <td></td>
-                                  <td></td>
+                                  <td class="transaction-info">
+                                    {{ formatDate(detail.transaction_date) }}
+                                    <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">
+                                      {{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}
+                                    </span>
+                                    <span class="transaction-code">{{ detail.transaction_code }}</span>
+                                  </td>
+                                  <td class="quantity-price">
+                                    {{ formatNumber(detail.total_quantity, 0) }} @ 
+                                    {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}
+                                  </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
+                                  <td class="text-end cost">
+                                    {{ formatNumber(detail.unit_cost, 3) }}
+                                  </td>
+                                  <td class="text-end fees">
+                                    {{ formatNumber(detail.total_fees_hkd) }}
+                                  </td>
+                                  <td class="text-end">
+                                    {{ formatNumber(detail.exchange_rate, 4) }}
+                                  </td>
+                                  <td class="text-end">
+                                    {{ formatNumber(detail.total_amount_hkd) }}
+                                  </td>
+                                  <td class="text-end" :class="getProfitClass(detail.transaction_profit)">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.transaction_profit) : '-' }}
+                                  </td>
                                 </tr>
                               </template>
                               <tr v-else>
@@ -211,18 +247,54 @@
                       <td colspan="13" class="p-0">
                         <div class="transaction-details">
                           <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th class="transaction-info">交易日期</th>
+                                <th class="quantity-price">数量@单价</th>
+                                <th class="text-end amount">买入金额</th>
+                                <th class="text-end amount">卖出金额</th>
+                                <th class="text-end cost">成本价</th>
+                                <th class="text-end fees">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                                <th class="text-end">盈亏</th>
+                              </tr>
+                            </thead>
                             <tbody>
                               <template v-if="transactionDetails[`${market}-${stock.code}`]">
                                 <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
-                                  <td class="transaction-info">{{ formatDate(detail.transaction_date) }} <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</span> <span class="transaction-code">{{ detail.transaction_code }}</span></td>
-                                  <td class="quantity-price">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
-                                  <td class="text-end amount">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
-                                  <td class="text-end amount">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
-                                  <td class="text-end fees">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td></td>
-                                  <td></td>
-                                  <td></td>
-                                  <td></td>
+                                  <td class="transaction-info">
+                                    {{ formatDate(detail.transaction_date) }}
+                                    <span :class="['transaction-type-badge', detail.transaction_type === 'BUY' ? 'buy' : 'sell']">
+                                      {{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}
+                                    </span>
+                                    <span class="transaction-code">{{ detail.transaction_code }}</span>
+                                  </td>
+                                  <td class="quantity-price">
+                                    {{ formatNumber(detail.total_quantity, 0) }} @ 
+                                    {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}
+                                  </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
+                                  <td class="text-end cost">
+                                    {{ formatNumber(detail.unit_cost, 3) }}
+                                  </td>
+                                  <td class="text-end fees">
+                                    {{ formatNumber(detail.total_fees_hkd) }}
+                                  </td>
+                                  <td class="text-end">
+                                    {{ formatNumber(detail.exchange_rate, 4) }}
+                                  </td>
+                                  <td class="text-end">
+                                    {{ formatNumber(detail.total_amount_hkd) }}
+                                  </td>
+                                  <td class="text-end" :class="getProfitClass(detail.transaction_profit)">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.transaction_profit) : '-' }}
+                                  </td>
                                 </tr>
                               </template>
                               <tr v-else>
@@ -746,36 +818,37 @@ onMounted(() => {
   margin-left: 4px;
 }
 
+/* 交易信息列样式 */
+.transaction-info {
+  min-width: 180px;
+  padding-left: 1rem !important;
+  font-size: 12px;
+}
+
 /* 数量@单价列样式 */
 .quantity-price {
-  min-width: 300px;
+  min-width: 140px;
   padding-left: 1rem !important;
   text-align: left !important;
   font-size: 12px;
 }
 
-/* 交易信息列样式 */
-.transaction-info {
-  min-width: 200px;
-  padding-left: 1rem !important;
-  font-size: 12px;
-}
-
 /* 金额列样式 */
 .amount {
-  min-width: 100px;
+  min-width: 80px;
   font-size: 12px;
 }
 
-/* 价格列样式 */
-.price {
-  min-width: 100px;
+/* 单笔成本列样式 */
+.cost {
+  min-width: 80px;
   font-size: 12px;
+  color: #6c757d;
 }
 
 /* 费用列样式 */
 .fees {
-  min-width: 100px;
+  min-width: 80px;
   font-size: 12px;
 }
 </style> 
