@@ -7,6 +7,8 @@ from models.exchange_rate import ExchangeRate
 from models.stock import Stock
 from models.transaction import StockTransaction
 import logging
+import json
+from sqlalchemy import text
 
 stock_bp = Blueprint('stock', __name__)
 logger = logging.getLogger(__name__)
@@ -16,71 +18,110 @@ logger = logging.getLogger(__name__)
 def get_transactions():
     """获取交易记录列表"""
     try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 15, type=int)
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'code': 401, 'message': '请先登录'})
+
+        # 获取查询参数
+        market = request.args.get('market')
+        stock_codes = request.args.getlist('stock_codes[]')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        market = request.args.get('market')
-        stock_codes = request.args.getlist('stock_codes')
-        
-        # 构建SQL查询
-        sql = """
-            SELECT * FROM stock_transactions 
-            WHERE user_id = %s
-        """
-        params = [session['user_id']]
-        
-        if start_date:
-            sql += " AND transaction_date >= %s"
-            params.append(start_date)
-        if end_date:
-            sql += " AND transaction_date <= %s"
-            params.append(end_date)
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        offset = (page - 1) * per_page
+
+        # 构建基础查询条件
+        conditions = ['t.user_id = :user_id']
+        params = {'user_id': user_id}
+
         if market:
-            sql += " AND market = %s"
-            params.append(market)
+            conditions.append('s.market = :market')
+            params['market'] = market
         if stock_codes:
-            placeholders = ','.join(['%s'] * len(stock_codes))
-            sql += f" AND stock_code IN ({placeholders})"
-            params.extend(stock_codes)
-            
-        # 添加排序和分页
-        sql += " ORDER BY transaction_date DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
-        
-        # 获取总记录数
-        count_sql = """
-            SELECT COUNT(*) as total FROM stock_transactions 
-            WHERE user_id = %s
-        """
-        count_params = [session['user_id']]
-        
+            conditions.append('s.code IN :stock_codes')
+            params['stock_codes'] = tuple(stock_codes)
         if start_date:
-            count_sql += " AND transaction_date >= %s"
-            count_params.append(start_date)
+            conditions.append('t.transaction_date >= :start_date')
+            params['start_date'] = start_date
         if end_date:
-            count_sql += " AND transaction_date <= %s"
-            count_params.append(end_date)
-        if market:
-            count_sql += " AND market = %s"
-            count_params.append(market)
-        if stock_codes:
-            placeholders = ','.join(['%s'] * len(stock_codes))
-            count_sql += f" AND stock_code IN ({placeholders})"
-            count_params.extend(stock_codes)
-        
-        # 执行查询
-        transactions = db.fetch_all(sql, params)
-        total_result = db.fetch_one(count_sql, count_params)
-        total = total_result['total'] if total_result else 0
-        
+            conditions.append('t.transaction_date <= :end_date')
+            params['end_date'] = end_date
+
+        where_clause = ' AND '.join(conditions)
+
+        # 查询交易记录及其明细
+        sql = f"""
+            SELECT 
+                t.id,
+                t.transaction_code,
+                t.transaction_date,
+                t.transaction_type,
+                t.total_fees,
+                s.market,
+                s.code,
+                s.name,
+                s.current_price,
+                GROUP_CONCAT(
+                    JSON_OBJECT(
+                        'id', d.id,
+                        'quantity', d.quantity,
+                        'price', d.price,
+                        'amount', d.amount
+                    )
+                ) as details
+            FROM stock_transactions t
+            JOIN stocks s ON t.stock_id = s.id
+            JOIN stock_transaction_details d ON t.id = d.transaction_id
+            WHERE {where_clause}
+            GROUP BY t.id, t.transaction_code, t.transaction_date, t.transaction_type, 
+                    t.total_fees, s.market, s.code, s.name, s.current_price
+            ORDER BY t.transaction_date DESC, t.id DESC
+            LIMIT :per_page OFFSET :offset
+        """
+
+        # 查询总记录数
+        count_sql = f"""
+            SELECT COUNT(DISTINCT t.id)
+            FROM stock_transactions t
+            JOIN stocks s ON t.stock_id = s.id
+            WHERE {where_clause}
+        """
+
+        params['per_page'] = per_page
+        params['offset'] = offset
+
+        with db.engine.connect() as conn:
+            # 执行查询
+            result = conn.execute(text(sql), params)
+            transactions = []
+            for row in result:
+                transaction = dict(row)
+                # 解析交易明细JSON字符串
+                details_str = transaction['details']
+                if details_str:
+                    details = [json.loads(detail) for detail in details_str.split(',')]
+                    transaction['details'] = details
+                transactions.append(transaction)
+
+            # 获取总记录数
+            total = conn.execute(text(count_sql), params).scalar()
+
+        # 按市场和股票代码分组交易记录
+        grouped_transactions = {}
+        for transaction in transactions:
+            key = f"{transaction['market']}-{transaction['code']}"
+            if key not in grouped_transactions:
+                grouped_transactions[key] = []
+            grouped_transactions[key].append(transaction)
+
         return jsonify({
-            'success': True,
+            'code': 200,
             'data': {
-                'items': transactions,
+                'transactions': grouped_transactions,
                 'total': total,
-                'pages': (total + per_page - 1) // per_page,
-                'current_page': page
+                'page': page,
+                'per_page': per_page
             }
         })
     except Exception as e:

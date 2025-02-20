@@ -4,15 +4,15 @@
       <h4 class="mb-0">股票管理</h4>
       <div class="btn-group">
         <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleSearch">
-          <i :class="['fas', searchVisible ? 'fa-chevron-up' : 'fa-search']"></i>
+          <i :class="['bi', searchVisible ? 'bi-chevron-up' : 'bi-search']"></i>
           {{ searchVisible ? '收起' : '搜索' }}
         </button>
         <button type="button" class="btn btn-sm btn-outline-primary" @click="refreshPrices" :disabled="loading">
-          <i :class="['fas', loading ? 'fa-spinner fa-spin' : 'fa-sync']"></i>
+          <i :class="['bi', loading ? 'bi-arrow-clockwise bi-spin' : 'bi-arrow-clockwise']"></i>
           刷新价格
         </button>
         <button type="button" class="btn btn-sm btn-primary" @click="showAddModal">
-          <i class="fas fa-plus"></i> 添加股票
+          <i class="bi bi-plus-lg"></i> 添加股票
         </button>
       </div>
     </div>
@@ -47,6 +47,7 @@
         <table class="table table-hover table-sm mb-0">
           <thead class="table-light">
             <tr>
+              <th></th>
               <th>市场</th>
               <th>代码</th>
               <th>名称</th>
@@ -58,55 +59,108 @@
           </thead>
           <tbody>
             <template v-if="!loading">
-              <tr v-for="stock in stocks" :key="stock.id">
-                <td>{{ stock.market }}</td>
-                <td>{{ stock.code }}</td>
-                <td>
-                  <span v-if="!stock.editing" @dblclick="startEdit(stock)">{{ stock.name || '-' }}</span>
-                  <div v-else class="input-group input-group-sm">
-                    <input type="text" class="form-control form-control-sm" v-model="stock.editName"
-                           @keyup.enter="saveEdit(stock)" @keyup.esc="cancelEdit(stock)">
-                    <button class="btn btn-success" @click="saveEdit(stock)">
-                      <i class="fas fa-check"></i>
+              <template v-for="stock in stocks" :key="stock.id">
+                <tr>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-outline-secondary expand-btn" @click="toggleDetails(stock)">
+                      <i class="bi" :class="expandedStocks.includes(stock.id) ? 'bi-dash-circle' : 'bi-plus-circle'"></i>
                     </button>
-                    <button class="btn btn-outline-secondary" @click="cancelEdit(stock)">
-                      <i class="fas fa-times"></i>
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <span v-if="!stock.editingFullName" @dblclick="startEditFullName(stock)">
-                    {{ stock.full_name || '-' }}
-                  </span>
-                  <div v-else class="input-group input-group-sm">
-                    <input type="text" class="form-control form-control-sm" v-model="stock.editFullName"
-                           @keyup.enter="saveEditFullName(stock)" @keyup.esc="cancelEditFullName(stock)">
-                    <button class="btn btn-success" @click="saveEditFullName(stock)">
-                      <i class="fas fa-check"></i>
-                    </button>
-                    <button class="btn btn-outline-secondary" @click="cancelEditFullName(stock)">
-                      <i class="fas fa-times"></i>
-                    </button>
-                  </div>
-                </td>
-                <td class="text-end">
-                  {{ formatNumber(stock.current_price, 3) }}
-                  <small v-if="stock.current_price" class="text-muted">
-                    {{ stock.market === 'HK' ? 'HKD' : 'USD' }}
-                  </small>
-                </td>
-                <td>{{ formatDateTime(stock.updated_at) }}</td>
-                <td>
-                  <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" @click="showEditModal(stock)">
-                      <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-outline-danger" @click="confirmDelete(stock)">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td>{{ stock.market }}</td>
+                  <td>{{ stock.code }}</td>
+                  <td>
+                    <span v-if="!stock.editing" @dblclick="startEdit(stock)">{{ stock.name || '-' }}</span>
+                    <div v-else class="input-group input-group-sm">
+                      <input type="text" class="form-control form-control-sm" v-model="stock.editName"
+                             @keyup.enter="saveEdit(stock)" @keyup.esc="cancelEdit(stock)">
+                      <button class="btn btn-success" @click="saveEdit(stock)">
+                        <i class="bi bi-check"></i>
+                      </button>
+                      <button class="btn btn-outline-secondary" @click="cancelEdit(stock)">
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span v-if="!stock.editingFullName" @dblclick="startEditFullName(stock)">
+                      {{ stock.full_name || '-' }}
+                    </span>
+                    <div v-else class="input-group input-group-sm">
+                      <input type="text" class="form-control form-control-sm" v-model="stock.editFullName"
+                             @keyup.enter="saveEditFullName(stock)" @keyup.esc="cancelEditFullName(stock)">
+                      <button class="btn btn-success" @click="saveEditFullName(stock)">
+                        <i class="bi bi-check"></i>
+                      </button>
+                      <button class="btn btn-outline-secondary" @click="cancelEditFullName(stock)">
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </div>
+                  </td>
+                  <td class="text-end">
+                    {{ formatNumber(stock.current_price, 3) }}
+                    <small v-if="stock.current_price" class="text-muted">
+                      {{ stock.market === 'HK' ? 'HKD' : 'USD' }}
+                    </small>
+                  </td>
+                  <td>{{ formatDateTime(stock.updated_at) }}</td>
+                  <td>
+                    <div class="btn-group btn-group-sm">
+                      <button class="btn btn-outline-primary" @click="showEditModal(stock)">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <button class="btn btn-outline-danger" @click="confirmDelete(stock)">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <!-- 交易明细行 -->
+                <tr v-if="expandedStocks.includes(stock.id)">
+                  <td colspan="8" class="p-0">
+                    <div class="transaction-details">
+                      <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>交易日期</th>
+                            <th>交易编号</th>
+                            <th>类型</th>
+                            <th class="text-end">数量</th>
+                            <th class="text-end">价格</th>
+                            <th class="text-end">金额</th>
+                            <th class="text-end">费用</th>
+                            <th class="text-end">汇率</th>
+                            <th class="text-end">港币金额</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template v-if="transactionDetails[stock.id]">
+                            <tr v-for="detail in transactionDetails[stock.id]" :key="detail.id">
+                              <td>{{ formatDate(detail.transaction_date) }}</td>
+                              <td>{{ detail.transaction_code }}</td>
+                              <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
+                              <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
+                              <td class="text-end">
+                                <template v-for="(d, index) in detail.details" :key="index">
+                                  {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
+                                </template>
+                              </td>
+                              <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                              <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                              <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
+                              <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                            </tr>
+                          </template>
+                          <tr v-else>
+                            <td colspan="9" class="text-center py-2">
+                              <small class="text-muted">暂无交易明细数据</small>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              </template>
             </template>
             <tr v-else>
               <td colspan="7" class="text-center py-3">
@@ -124,7 +178,7 @@
           <ul class="pagination pagination-sm mb-0">
             <li :class="['page-item', { disabled: !pagination.has_prev }]">
               <a class="page-link" href="#" @click.prevent="changePage(pagination.current_page - 1)">
-                <i class="fas fa-chevron-left"></i>
+                <i class="bi bi-chevron-left"></i>
               </a>
             </li>
             
@@ -139,7 +193,7 @@
             
             <li :class="['page-item', { disabled: !pagination.has_next }]">
               <a class="page-link" href="#" @click.prevent="changePage(pagination.current_page + 1)">
-                <i class="fas fa-chevron-right"></i>
+                <i class="bi bi-chevron-right"></i>
               </a>
             </li>
           </ul>
@@ -187,7 +241,7 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
             <button type="button" class="btn btn-primary" @click="submitStock" :disabled="submitting">
-              <i :class="['fas', submitting ? 'fa-spinner fa-spin' : 'fa-save']"></i>
+              <i :class="['bi', submitting ? 'bi-arrow-clockwise bi-spin' : 'bi-save']"></i>
               保存
             </button>
           </div>
@@ -557,6 +611,52 @@ const confirmDelete = async (stock) => {
   }
 }
 
+// 添加展开/收起状态管理
+const expandedStocks = ref([])
+const transactionDetails = ref({})
+
+// 添加切换明细显示方法
+const toggleDetails = async (stock) => {
+  const index = expandedStocks.value.indexOf(stock.id)
+  if (index === -1) {
+    // 展开并获取数据
+    expandedStocks.value.push(stock.id)
+    
+    try {
+      const params = new URLSearchParams()
+      params.append('market', stock.market)
+      params.append('stock_codes[]', stock.code)
+      
+      const response = await axios.get(`/api/profit/?${params.toString()}`)
+      console.log('获取到的响应:', response.data)
+      
+      if (response.data.success) {
+        const key = `${stock.market}-${stock.code}`
+        if (response.data.data.transaction_details && response.data.data.transaction_details[key]) {
+          transactionDetails.value[stock.id] = response.data.data.transaction_details[key]
+        } else {
+          transactionDetails.value[stock.id] = []
+        }
+      }
+    } catch (error) {
+      console.error('获取交易明细失败:', error)
+      transactionDetails.value[stock.id] = []
+    }
+  } else {
+    // 收起
+    expandedStocks.value.splice(index, 1)
+  }
+}
+
+// 添加日期格式化方法
+const formatDate = (date) => {
+  return new Date(date).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).replace(/\//g, '-')
+}
+
 // 初始化
 onMounted(() => {
   initModal()
@@ -595,5 +695,98 @@ onMounted(() => {
 .input-group-sm > .btn {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
+}
+
+/* 展开按钮样式 */
+.expand-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.expand-btn:hover {
+  background-color: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+.expand-btn .bi {
+  font-size: 1.25rem;
+}
+
+.expand-btn .bi-plus-circle {
+  color: #0d6efd;
+}
+
+.expand-btn .bi-dash-circle {
+  color: #dc3545;
+}
+
+.expand-btn:hover .bi-plus-circle {
+  color: #0a58ca;
+}
+
+.expand-btn:hover .bi-dash-circle {
+  color: #b02a37;
+}
+
+/* 按钮中的图标通用样式 */
+.btn .bi {
+  font-size: 1rem;
+  margin-right: 0.25rem;
+}
+
+.btn-group-sm .btn .bi {
+  font-size: 0.875rem;
+}
+
+/* 旋转动画 */
+@keyframes bi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.bi-spin {
+  display: inline-block;
+  animation: bi-spin 1s linear infinite;
+}
+
+/* 交易明细样式 */
+.transaction-details {
+  background-color: #f8f9fa;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.transaction-details .table {
+  background-color: white;
+  margin-bottom: 0;
+}
+
+.transaction-details th,
+.transaction-details td {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.transaction-details th {
+  background-color: #f1f3f5;
+  font-weight: 500;
+  color: #495057;
+}
+
+.transaction-details td {
+  vertical-align: middle;
+}
+
+.transaction-details tr:hover {
+  background-color: #f8f9fa;
 }
 </style> 

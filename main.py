@@ -4,14 +4,31 @@ from config.database import db
 from services.exchange_rate import ExchangeRateService
 import os
 import logging
+from logging.handlers import RotatingFileHandler
+import sys
+
+# 添加当前目录到 Python 路径
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def create_app(config_name='development'):
+    # 创建日志目录
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+    
     # 配置日志
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     logger = logging.getLogger(__name__)
+    
+    # 添加RotatingFileHandler
+    handler = RotatingFileHandler('logs/app.log', maxBytes=10000000, backupCount=5)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    handler.setLevel(logging.INFO)
+    logger.addHandler(handler)
     
     app = Flask(__name__)
     
@@ -30,7 +47,7 @@ def create_app(config_name='development'):
         'host': '172.16.0.109',
         'user': 'root',
         'password': 'Zxc000123',
-        'database': 'Stock',
+        'database': 'stock',
         'port': 3306
     }
     if not db.connect(db_config):

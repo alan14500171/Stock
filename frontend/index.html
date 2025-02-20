@@ -1,11 +1,44 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>股票交易系统</title>
+    <title>股票交易管理系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: "bootstrap-icons";
+            src: url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2") format("woff2"),
+                 url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff") format("woff");
+        }
+
+        .bi::before {
+            font-family: bootstrap-icons !important;
+            font-style: normal;
+            font-weight: normal !important;
+            font-variant: normal;
+            text-transform: none;
+            line-height: 1;
+            vertical-align: -0.125em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .bi-plus-circle::before { content: "\f4fa"; }
+        .bi-dash-circle::before { content: "\f2e9"; }
+        .bi-chevron-up::before { content: "\f285"; }
+        .bi-search::before { content: "\f52a"; }
+        .bi-arrow-clockwise::before { content: "\f116"; }
+        .bi-plus-lg::before { content: "\f4f9"; }
+        .bi-check::before { content: "\f26e"; }
+        .bi-x::before { content: "\f62a"; }
+        .bi-pencil::before { content: "\f4cb"; }
+        .bi-trash::before { content: "\f5de"; }
+        .bi-chevron-left::before { content: "\f284"; }
+        .bi-chevron-right::before { content: "\f285"; }
+        .bi-save::before { content: "\f527"; }
+    </style>
 </head>
 <body>
     <div id="app"></div>

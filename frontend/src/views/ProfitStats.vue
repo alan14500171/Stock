@@ -23,11 +23,11 @@
       <form @submit.prevent="search" class="row g-3">
         <div class="col-md-3">
           <label class="form-label small">开始日期</label>
-          <date-input v-model="searchForm.startDate" />
+          <date-input v-model="searchForm.startDate" @update:modelValue="handleStartDateChange" />
         </div>
         <div class="col-md-3">
           <label class="form-label small">结束日期</label>
-          <date-input v-model="searchForm.endDate" />
+          <date-input v-model="searchForm.endDate" @update:modelValue="handleEndDateChange" />
         </div>
         <div class="col-md-2">
           <label class="form-label small">市场</label>
@@ -106,15 +106,13 @@
                   <td colspan="12">
                     <i class="bi bi-graph-up text-success"></i>
                     持仓股票
+                    <span class="badge bg-secondary ms-2">{{ getHoldingStocks(market).length }}</span>
                   </td>
                 </tr>
 
-                <!-- 持仓股票列表 -->
-                <template v-if="isHoldingGroupExpanded(market)" v-for="stock in getHoldingStocks(market)" :key="stock.code">
-                  <tr class="stock-row holding-stock" @click="toggleStock(market, stock.code)">
-                    <td class="text-center">
-                      <i :class="['bi', isStockExpanded(`${market}-${stock.code}`) ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
-                    </td>
+                <template v-if="isHoldingGroupExpanded(market)">
+                  <tr v-for="stock in getHoldingStocks(market)" :key="stock.code" class="stock-row holding-stock">
+                    <td></td>
                     <td>
                       {{ stock.code }}
                       <br>
@@ -138,35 +136,6 @@
                       {{ formatRate(stock.profit_rate) }}
                     </td>
                   </tr>
-
-                  <!-- 交易明细行 -->
-                  <template v-if="isStockExpanded(`${market}-${stock.code}`) && transactionDetails[`${market}-${stock.code}`]">
-                    <tr v-for="transaction in transactionDetails[`${market}-${stock.code}`]" 
-                        :key="transaction.id" 
-                        class="transaction-row">
-                      <td></td>
-                      <td>
-                        <small class="text-muted">{{ transaction.transaction_date }}</small>
-                        <br>
-                        <small>{{ transaction.transaction_code }}</small>
-                      </td>
-                      <td class="text-end">{{ transaction.transaction_type === 'buy' ? transaction.total_quantity : -transaction.total_quantity }}</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end" :class="{'text-danger': transaction.transaction_type === 'buy'}">
-                        {{ transaction.transaction_type === 'buy' ? formatNumber(transaction.total_amount) : '-' }}
-                      </td>
-                      <td class="text-end">{{ formatNumber(transaction.total_amount / transaction.total_quantity, 3) }}</td>
-                      <td class="text-end" :class="{'text-success': transaction.transaction_type === 'sell'}">
-                        {{ transaction.transaction_type === 'sell' ? formatNumber(transaction.total_amount) : '-' }}
-                      </td>
-                      <td class="text-end">{{ formatNumber(transaction.total_fees) }}</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                    </tr>
-                  </template>
                 </template>
 
                 <!-- 已清仓股票组 -->
@@ -177,15 +146,13 @@
                   <td colspan="12">
                     <i class="bi bi-check-circle text-secondary"></i>
                     已清仓股票
+                    <span class="badge bg-secondary ms-2">{{ getClosedStocks(market).length }}</span>
                   </td>
                 </tr>
 
-                <!-- 已清仓股票列表 -->
-                <template v-if="isClosedGroupExpanded(market)" v-for="stock in getClosedStocks(market)" :key="stock.code">
-                  <tr class="stock-row closed-stock" @click="toggleStock(market, stock.code)">
-                    <td class="text-center">
-                      <i :class="['bi', isStockExpanded(`${market}-${stock.code}`) ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
-                    </td>
+                <template v-if="isClosedGroupExpanded(market)">
+                  <tr v-for="stock in getClosedStocks(market)" :key="stock.code" class="stock-row closed-stock">
+                    <td></td>
                     <td>
                       {{ stock.code }}
                       <br>
@@ -209,35 +176,6 @@
                       {{ formatRate(stock.profit_rate) }}
                     </td>
                   </tr>
-
-                  <!-- 交易明细行 -->
-                  <template v-if="isStockExpanded(`${market}-${stock.code}`) && transactionDetails[`${market}-${stock.code}`]">
-                    <tr v-for="transaction in transactionDetails[`${market}-${stock.code}`]" 
-                        :key="transaction.id" 
-                        class="transaction-row">
-                      <td></td>
-                      <td>
-                        <small class="text-muted">{{ transaction.transaction_date }}</small>
-                        <br>
-                        <small>{{ transaction.transaction_code }}</small>
-                      </td>
-                      <td class="text-end">{{ transaction.transaction_type === 'buy' ? transaction.total_quantity : -transaction.total_quantity }}</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end" :class="{'text-danger': transaction.transaction_type === 'buy'}">
-                        {{ transaction.transaction_type === 'buy' ? formatNumber(transaction.total_amount) : '-' }}
-                      </td>
-                      <td class="text-end">{{ formatNumber(transaction.total_amount / transaction.total_quantity, 3) }}</td>
-                      <td class="text-end" :class="{'text-success': transaction.transaction_type === 'sell'}">
-                        {{ transaction.transaction_type === 'sell' ? formatNumber(transaction.total_amount) : '-' }}
-                      </td>
-                      <td class="text-end">{{ formatNumber(transaction.total_fees) }}</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                      <td class="text-end">-</td>
-                    </tr>
-                  </template>
                 </template>
               </template>
             </template>
@@ -250,8 +188,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import DateInput from '../components/DateInput.vue'
 import axios from 'axios'
+
+const router = useRouter()
 
 // 状态管理
 const loading = ref(false)
@@ -273,12 +214,25 @@ const searchForm = reactive({
 
 // 计算属性
 const getMarketStocks = (market) => {
-  return Object.entries(stockStats.value)
+  const stocks = Object.entries(stockStats.value)
     .filter(([_, stock]) => stock.market === market)
     .map(([code, stock]) => ({ code, ...stock }))
-    .sort((a, b) => b.total_buy - a.total_buy)
+  
+  // 按持仓状态和市值排序
+  return stocks.sort((a, b) => {
+    // 先按持仓状态排序
+    if (a.quantity > 0 && b.quantity <= 0) return -1
+    if (a.quantity <= 0 && b.quantity > 0) return 1
+    // 持仓的按市值排序
+    if (a.quantity > 0 && b.quantity > 0) {
+      return b.market_value - a.market_value
+    }
+    // 已清仓的按总盈亏排序
+    return b.total_profit - a.total_profit
+  })
 }
 
+// 获取市场持仓股票
 const getHoldingStocks = (market) => {
   return Object.entries(stockStats.value)
     .filter(([_, stock]) => stock.market === market && stock.quantity > 0)
@@ -286,9 +240,10 @@ const getHoldingStocks = (market) => {
     .sort((a, b) => b.market_value - a.market_value)
 }
 
+// 获取市场已清仓股票
 const getClosedStocks = (market) => {
   return Object.entries(stockStats.value)
-    .filter(([_, stock]) => stock.market === market && (!stock.quantity || stock.quantity <= 0))
+    .filter(([_, stock]) => stock.market === market && stock.quantity <= 0)
     .map(([code, stock]) => ({ code, ...stock }))
     .sort((a, b) => b.total_profit - a.total_profit)
 }
@@ -321,8 +276,12 @@ const isStockExpanded = (stockKey) => expandedStocks.value.has(stockKey)
 const toggleMarket = (market) => {
   if (expandedMarkets.value.has(market)) {
     expandedMarkets.value.delete(market)
+    expandedHoldingGroups.value.delete(market)
+    expandedClosedGroups.value.delete(market)
   } else {
     expandedMarkets.value.add(market)
+    expandedHoldingGroups.value.add(market)
+    expandedClosedGroups.value.add(market)
   }
 }
 
@@ -348,7 +307,6 @@ const toggleStock = async (market, code) => {
     expandedStocks.value.delete(stockKey)
   } else {
     expandedStocks.value.add(stockKey)
-    // 获取交易明细
     await loadTransactionDetails(market, code)
   }
 }
@@ -359,7 +317,7 @@ const loadTransactionDetails = async (market, code) => {
 
   try {
     loading.value = true
-    const response = await axios.get(`/api/stock/transactions`, {
+    const response = await axios.get('/api/stock/transactions', {
       params: {
         market,
         stock_code: code,
@@ -406,7 +364,7 @@ const search = async () => {
     if (searchForm.endDate) params.append('end_date', searchForm.endDate)
     if (searchForm.market) params.append('market', searchForm.market)
     
-    const response = await axios.get(`/api/profit?${params.toString()}`)
+    const response = await axios.get('/api/profit', { params })
     if (response.data.success) {
       marketStats.value = response.data.data.market_stats
       stockStats.value = response.data.data.stock_stats
@@ -432,9 +390,8 @@ const refreshMarketValue = async () => {
   
   loading.value = true
   try {
-    const response = await axios.get('/api/portfolio/market-value')
+    const response = await axios.post('/api/stock/stocks/update-prices')
     if (response.data.success) {
-      // 刷新数据
       search()
     }
   } catch (error) {
@@ -444,10 +401,9 @@ const refreshMarketValue = async () => {
   }
 }
 
-// 初始化
-onMounted(() => {
-  search()
-})
+const addTransaction = () => {
+  router.push('/transactions/add')
+}
 
 // 日期变更处理
 const handleStartDateChange = (value) => {
@@ -464,10 +420,10 @@ const handleEndDateChange = (value) => {
   }
 }
 
-// 刷新数据
-const refreshData = () => {
+// 初始化
+onMounted(() => {
   search()
-}
+})
 </script>
 
 <style scoped>
@@ -477,18 +433,8 @@ const refreshData = () => {
 }
 
 .group-row {
-  background-color: #fff;
+  background-color: #f8f9fa;
   cursor: pointer;
-  font-weight: 500;
-}
-
-.group-row td {
-  padding: 0.5rem 1rem;
-  color: #6c757d;
-}
-
-.group-row i {
-  margin-right: 0.5rem;
 }
 
 .holding-group {
@@ -501,26 +447,10 @@ const refreshData = () => {
 
 .holding-stock {
   border-left: 4px solid #198754;
-  cursor: pointer;
-  padding-left: 2rem;
 }
 
 .closed-stock {
   border-left: 4px solid #6c757d;
-  cursor: pointer;
-  padding-left: 2rem;
-}
-
-.transaction-row {
-  background-color: #fafafa;
-  font-size: 0.875rem;
-}
-
-.transaction-row td {
-  border-top: 1px dashed #dee2e6;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-  padding-left: 3rem;
 }
 
 .text-success {
@@ -549,19 +479,19 @@ const refreshData = () => {
   font-size: 0.875rem;
 }
 
-.stock-row:hover, .market-row:hover, .group-row:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.stock-row:hover {
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
 .stock-row td {
-  padding-left: 2rem;
+  padding-left: 1rem;
 }
 
 .stock-row small {
   font-size: 0.75rem;
 }
 
-.transaction-row:hover {
-  background-color: #f5f5f5;
+.badge {
+  font-weight: normal;
 }
 </style> 

@@ -1,5 +1,8 @@
 from datetime import datetime
 from config.database import db
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Stock:
     """股票信息表"""
@@ -9,56 +12,52 @@ class Stock:
         self.market = data.get('market') if data else None
         self.name = data.get('name') if data else None
         self.full_name = data.get('full_name') if data else None
-        self.industry = data.get('industry') if data else None
-        self.currency = data.get('currency') if data else None
-        self.current_price = data.get('current_price') if data else None
-        self.price_updated_at = data.get('price_updated_at') if data else None
         self.created_at = data.get('created_at') if data else datetime.utcnow()
         self.updated_at = data.get('updated_at') if data else datetime.utcnow()
     
     def save(self):
         """保存或更新股票信息"""
-        if self.id:
-            # 更新
-            sql = """
-                UPDATE stocks 
-                SET code = %s, market = %s, name = %s,
-                    full_name = %s, industry = %s, currency = %s,
-                    current_price = %s, price_updated_at = %s,
-                    updated_at = %s
-                WHERE id = %s
-            """
-            params = (self.code, self.market, self.name,
-                     self.full_name, self.industry, self.currency,
-                     self.current_price, self.price_updated_at,
-                     datetime.utcnow(), self.id)
+        try:
+            if self.id:
+                # 更新
+                sql = """
+                    UPDATE stocks 
+                    SET code = %s, market = %s, name = %s, 
+                        full_name = %s, updated_at = NOW()
+                    WHERE id = %s
+                """
+                params = [
+                    self.code, self.market, self.name,
+                    self.full_name, self.id
+                ]
+            else:
+                # 新增
+                sql = """
+                    INSERT INTO stocks (
+                        code, market, name, full_name, 
+                        created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, NOW(), NOW()
+                    )
+                """
+                params = [
+                    self.code, self.market, self.name,
+                    self.full_name
+                ]
+            
             return db.execute(sql, params)
-        else:
-            # 新增
-            sql = """
-                INSERT INTO stocks 
-                (code, market, name, full_name, industry, currency,
-                 current_price, price_updated_at, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            params = (self.code, self.market, self.name,
-                     self.full_name, self.industry, self.currency,
-                     self.current_price, self.price_updated_at,
-                     self.created_at, self.updated_at)
-            self.id = db.insert(sql, params)
-            return bool(self.id)
+        except Exception as e:
+            logger.error(f"保存股票失败: {str(e)}")
+            return False
     
     def to_dict(self):
+        """转换为字典"""
         return {
             'id': self.id,
             'code': self.code,
             'market': self.market,
             'name': self.name,
             'full_name': self.full_name,
-            'industry': self.industry,
-            'currency': self.currency,
-            'current_price': float(self.current_price) if self.current_price else None,
-            'price_updated_at': self.price_updated_at.isoformat() if isinstance(self.price_updated_at, datetime) else self.price_updated_at,
             'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             'updated_at': self.updated_at.isoformat() if isinstance(self.updated_at, datetime) else self.updated_at
         }

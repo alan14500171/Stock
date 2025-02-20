@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 9009,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:9099',

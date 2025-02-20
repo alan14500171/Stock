@@ -30,5 +30,8 @@ MarkupSafe==2.1.5
 # 其他
 click==8.1.7
 
+# HTML解析
+beautifulsoup4==4.12.3
+
 # WebSocket支持
 gevent==24.2.1

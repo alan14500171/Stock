@@ -58,91 +58,240 @@
         <table class="table table-hover table-sm mb-0">
           <thead class="table-light">
             <tr>
-              <th>日期</th>
+              <th></th>
               <th>市场</th>
               <th>股票代码</th>
-              <th>交易编号</th>
-              <th>买卖</th>
-              <th>成交明细</th>
-              <th class="text-end">总金额</th>
-              <th class="text-end">经纪佣金</th>
-              <th class="text-end">交易征费</th>
-              <th class="text-end">印花税</th>
-              <th class="text-end">交易费</th>
-              <th class="text-end">存入证券费</th>
-              <th class="text-end">手续费</th>
-              <th class="text-end">净金额</th>
+              <th>名称</th>
+              <th>数量</th>
+              <th class="text-end">买入总额</th>
+              <th class="text-end">卖出总额</th>
+              <th class="text-end">费用</th>
+              <th class="text-end">已实现盈亏</th>
+              <th class="text-end">现价</th>
+              <th class="text-end">持仓价值</th>
+              <th class="text-end">总盈亏</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <template v-if="!loading">
-              <tr v-for="transaction in transactions" :key="transaction.id">
-                <td>{{ formatDate(transaction.transaction_date) }}</td>
-                <td>{{ transaction.market }}</td>
-                <td>
-                  <div>{{ transaction.stock_code }}</div>
-                  <small class="text-muted">{{ getStockName(transaction.stock_code) }}</small>
-                </td>
-                <td>{{ transaction.transaction_code }}</td>
-                <td>
-                  <span :class="['badge', transaction.transaction_type === 'BUY' ? 'bg-danger' : 'bg-success']">
-                    {{ transaction.transaction_type === 'BUY' ? '买入' : '卖出' }}
-                  </span>
-                </td>
-                <td>
-                  <div v-for="detail in transaction.details" :key="detail.id">
-                    {{ detail.quantity }}股 @ {{ formatNumber(detail.price, 3) }}
-                  </div>
-                </td>
-                <td class="text-end">
-                  {{ formatNumber(transaction.total_amount) }}
-                  <template v-if="transaction.market !== 'HK'">
-                    <br>
-                    <small class="text-muted">
-                      {{ formatNumber(transaction.exchange_rate, 3) }}@{{ formatNumber(transaction.total_amount_hkd) }}
-                    </small>
-                  </template>
-                </td>
-                <td class="text-end">{{ formatNumber(transaction.broker_fee) }}</td>
-                <td class="text-end">{{ formatNumber(transaction.transaction_levy) }}</td>
-                <td class="text-end">{{ formatNumber(transaction.stamp_duty) }}</td>
-                <td class="text-end">{{ formatNumber(transaction.trading_fee) }}</td>
-                <td class="text-end">{{ formatNumber(transaction.deposit_fee) }}</td>
-                <td class="text-end">{{ formatNumber(transaction.total_fees) }}</td>
-                <td class="text-end">
-                  {{ formatNumber(transaction.net_amount) }}
-                  <template v-if="transaction.market !== 'HK'">
-                    <br>
-                    <small class="text-muted">
-                      {{ formatNumber(transaction.exchange_rate, 3) }}@{{ formatNumber(transaction.net_amount_hkd) }}
-                    </small>
-                  </template>
-                </td>
-                <td>
-                  <div class="btn-group btn-group-sm">
-                    <router-link :to="`/transactions/edit/${transaction.id}`" class="btn btn-outline-primary">
-                      <i class="fas fa-edit"></i>
-                    </router-link>
-                    <button class="btn btn-outline-danger" @click="confirmDelete(transaction)">
-                      <i class="fas fa-trash"></i>
+              <template v-for="(group, marketCode) in groupedTransactions" :key="marketCode">
+                <!-- 市场分组头部 -->
+                <tr class="table-secondary">
+                  <td></td>
+                  <td colspan="12">
+                    <strong>{{ marketCode }}</strong>
+                    <span class="ms-2 text-muted">
+                      (总买入: {{ formatNumber(group.total.buy_amount) }},
+                      总卖出: {{ formatNumber(group.total.sell_amount) }},
+                      总费用: {{ formatNumber(group.total.fees) }})
+                    </span>
+                  </td>
+                </tr>
+
+                <!-- 持仓股票 -->
+                <tr v-if="group.holding_stocks && group.holding_stocks.length > 0" class="table-light">
+                  <td>
+                    <button class="btn btn-sm btn-outline-secondary expand-btn" @click="toggleHoldingStocks(marketCode)">
+                      <i class="fas" :class="isHoldingStocksExpanded(marketCode) ? 'fa-minus-square' : 'fa-plus-square'"></i>
                     </button>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td colspan="12">
+                    <strong class="text-primary">持仓股票 ({{ group.holding_stocks.length }})</strong>
+                  </td>
+                </tr>
+
+                <!-- 持仓股票列表 -->
+                <template v-if="isHoldingStocksExpanded(marketCode)">
+                  <template v-for="stock in group.holding_stocks" :key="`${stock.market}-${stock.code}`">
+                    <tr>
+                      <td class="text-center">
+                        <button class="btn btn-sm btn-outline-secondary expand-btn" @click="toggleDetails(stock)">
+                          <i class="fas" :class="expandedStocks.includes(`${stock.market}-${stock.code}`) ? 'fa-minus-circle' : 'fa-plus-circle'"></i>
+                        </button>
+                      </td>
+                      <td>{{ stock.market }}</td>
+                      <td>{{ stock.code }}</td>
+                      <td>{{ stock.name }}</td>
+                      <td>{{ formatNumber(stock.quantity) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_buy) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_sell) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
+                      <td class="text-end" :class="{'text-success': stock.realized_profit > 0, 'text-danger': stock.realized_profit < 0}">
+                        {{ formatNumber(stock.realized_profit) }}
+                      </td>
+                      <td class="text-end">{{ formatNumber(stock.current_price) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
+                      <td class="text-end" :class="{'text-success': stock.total_profit > 0, 'text-danger': stock.total_profit < 0}">
+                        {{ formatNumber(stock.total_profit) }}
+                        <small class="d-block text-muted">
+                          ({{ formatNumber(stock.profit_rate, 2) }}%)
+                        </small>
+                      </td>
+                      <td>
+                        <div class="btn-group btn-group-sm">
+                          <button class="btn btn-outline-primary" @click="showDetails(stock)">
+                            <i class="fas fa-list"></i>
+                          </button>
+                          <button class="btn btn-outline-secondary" @click="exportTransactions(stock)">
+                            <i class="fas fa-download"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- 交易明细行 -->
+                    <tr v-if="expandedStocks.includes(`${stock.market}-${stock.code}`)">
+                      <td colspan="13" class="p-0">
+                        <div class="transaction-details">
+                          <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>交易日期</th>
+                                <th>交易编号</th>
+                                <th>类型</th>
+                                <th class="text-end">数量</th>
+                                <th class="text-end">价格</th>
+                                <th class="text-end">金额</th>
+                                <th class="text-end">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template v-if="transactionDetails[`${stock.market}-${stock.code}`]">
+                                <tr v-for="detail in transactionDetails[`${stock.market}-${stock.code}`]" :key="detail.id">
+                                  <td>{{ formatDate(detail.transaction_date) }}</td>
+                                  <td>{{ detail.transaction_code }}</td>
+                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
+                                  <td class="text-end">
+                                    <template v-for="(d, index) in detail.details" :key="index">
+                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
+                                    </template>
+                                  </td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                </tr>
+                              </template>
+                              <tr v-else>
+                                <td colspan="9" class="text-center py-2">
+                                  <small class="text-muted">暂无交易明细数据</small>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </template>
+
+                <!-- 已清仓股票 -->
+                <tr v-if="group.closed_stocks && group.closed_stocks.length > 0" class="table-light">
+                  <td>
+                    <button class="btn btn-sm btn-outline-secondary expand-btn" @click="toggleClosedStocks(marketCode)">
+                      <i class="fas" :class="isClosedStocksExpanded(marketCode) ? 'fa-minus-square' : 'fa-plus-square'"></i>
+                    </button>
+                  </td>
+                  <td colspan="12">
+                    <strong class="text-secondary">已清仓股票 ({{ group.closed_stocks.length }})</strong>
+                  </td>
+                </tr>
+
+                <!-- 已清仓股票列表 -->
+                <template v-if="isClosedStocksExpanded(marketCode)">
+                  <template v-for="stock in group.closed_stocks" :key="`${stock.market}-${stock.code}`">
+                    <tr>
+                      <td class="text-center">
+                        <button class="btn btn-sm btn-outline-secondary expand-btn" @click="toggleDetails(stock)">
+                          <i class="fas" :class="expandedStocks.includes(`${stock.market}-${stock.code}`) ? 'fa-minus-circle' : 'fa-plus-circle'"></i>
+                        </button>
+                      </td>
+                      <td>{{ stock.market }}</td>
+                      <td>{{ stock.code }}</td>
+                      <td>{{ stock.name }}</td>
+                      <td>{{ formatNumber(stock.quantity) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_buy) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_sell) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
+                      <td class="text-end" :class="{'text-success': stock.realized_profit > 0, 'text-danger': stock.realized_profit < 0}">
+                        {{ formatNumber(stock.realized_profit) }}
+                      </td>
+                      <td class="text-end">{{ formatNumber(stock.current_price) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
+                      <td class="text-end" :class="{'text-success': stock.total_profit > 0, 'text-danger': stock.total_profit < 0}">
+                        {{ formatNumber(stock.total_profit) }}
+                        <small class="d-block text-muted">
+                          ({{ formatNumber(stock.profit_rate, 2) }}%)
+                        </small>
+                      </td>
+                      <td>
+                        <div class="btn-group btn-group-sm">
+                          <button class="btn btn-outline-primary" @click="showDetails(stock)">
+                            <i class="fas fa-list"></i>
+                          </button>
+                          <button class="btn btn-outline-secondary" @click="exportTransactions(stock)">
+                            <i class="fas fa-download"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- 交易明细行 -->
+                    <tr v-if="expandedStocks.includes(`${stock.market}-${stock.code}`)">
+                      <td colspan="13" class="p-0">
+                        <div class="transaction-details">
+                          <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>交易日期</th>
+                                <th>交易编号</th>
+                                <th>类型</th>
+                                <th class="text-end">数量</th>
+                                <th class="text-end">价格</th>
+                                <th class="text-end">金额</th>
+                                <th class="text-end">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template v-if="transactionDetails[`${stock.market}-${stock.code}`]">
+                                <tr v-for="detail in transactionDetails[`${stock.market}-${stock.code}`]" :key="detail.id">
+                                  <td>{{ formatDate(detail.transaction_date) }}</td>
+                                  <td>{{ detail.transaction_code }}</td>
+                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
+                                  <td class="text-end">
+                                    <template v-for="(d, index) in detail.details" :key="index">
+                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
+                                    </template>
+                                  </td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                </tr>
+                              </template>
+                              <tr v-else>
+                                <td colspan="9" class="text-center py-2">
+                                  <small class="text-muted">暂无交易明细数据</small>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </template>
+              </template>
             </template>
             <tr v-else>
-              <td colspan="15" class="text-center py-3">
+              <td colspan="12" class="text-center py-3">
                 <div class="spinner-border spinner-border-sm text-primary me-2"></div>
                 加载中...
-              </td>
-            </tr>
-            <tr v-if="!loading && transactions.length === 0">
-              <td colspan="15" class="text-center py-4">
-                <p class="text-muted mb-2">暂无交易记录</p>
-                <router-link to="/transactions/add" class="btn btn-primary btn-sm">
-                  添加第一条记录
-                </router-link>
               </td>
             </tr>
           </tbody>
@@ -205,6 +354,14 @@ const searchForm = reactive({
   stockCodes: []
 })
 
+// 添加展开/收起状态管理
+const expandedStocks = ref([])
+const transactionDetails = ref({})
+
+// 添加持仓和已清仓股票的展开状态管理
+const expandedHoldingStocks = ref([])
+const expandedClosedStocks = ref([])
+
 // 获取所有股票
 const fetchStocks = async () => {
   try {
@@ -228,15 +385,87 @@ const fetchTransactions = async () => {
     if (searchForm.endDate) params.append('end_date', searchForm.endDate)
     if (searchForm.market) params.append('market', searchForm.market)
     if (searchForm.stockCodes.length > 0) {
-      searchForm.stockCodes.forEach(code => params.append('stock_codes', code))
+      searchForm.stockCodes.forEach(code => params.append('stock_codes[]', code))
     }
     params.append('page', currentPage.value)
     params.append('per_page', pageSize)
     
-    const response = await axios.get(`/api/stock/transactions?${params.toString()}`)
+    console.log('发送请求获取交易记录:', `/api/profit/?${params.toString()}`)
+    const response = await axios.get(`/api/profit/?${params.toString()}`)
+    console.log('获取到的响应:', response.data)
+    
     if (response.data.success) {
-      transactions.value = response.data.data.items
-      totalPages.value = Math.ceil(response.data.data.total / pageSize)
+      // 处理市场统计数据
+      const marketStats = response.data.data.market_stats || {}
+      const stockStats = response.data.data.stock_stats || {}
+      
+      // 重置数据
+      transactions.value = []
+      
+      // 构建分组数据
+      const groups = {}
+      
+      // 处理每个市场的数据
+      Object.entries(marketStats).forEach(([market, marketData]) => {
+        groups[market] = {
+          total: {
+            buy_amount: marketData.total_buy || 0,
+            sell_amount: marketData.total_sell || 0,
+            fees: marketData.total_fees || 0
+          },
+          holding_stocks: [],
+          closed_stocks: []
+        }
+      })
+      
+      // 处理每个股票的数据
+      Object.entries(stockStats).forEach(([key, stockData]) => {
+        const [market, code] = key.split('-')
+        if (groups[market]) {
+          // 根据是否有持仓数量来区分持仓和已清仓
+          const stockList = stockData.quantity > 0 ? groups[market].holding_stocks : groups[market].closed_stocks
+          
+          stockList.push({
+            market: market,
+            code: code,
+            name: stockData.name,
+            quantity: stockData.quantity || 0,
+            total_buy: stockData.total_buy || 0,
+            total_sell: stockData.total_sell || 0,
+            total_fees: stockData.total_fees || 0,
+            realized_profit: stockData.realized_profit || 0,
+            current_price: stockData.current_price || 0,
+            market_value: stockData.market_value || 0,
+            total_profit: stockData.total_profit || 0,
+            profit_rate: stockData.profit_rate || 0
+          })
+        }
+      })
+      
+      // 更新数据
+      Object.entries(groups).forEach(([market, group]) => {
+        // 处理持仓股票
+        group.holding_stocks.forEach(stock => {
+          transactions.value.push({
+            market: stock.market,
+            stock_code: stock.code,
+            name: stock.name,
+            ...stock
+          })
+        })
+        
+        // 处理已清仓股票
+        group.closed_stocks.forEach(stock => {
+          transactions.value.push({
+            market: stock.market,
+            stock_code: stock.code,
+            name: stock.name,
+            ...stock
+          })
+        })
+      })
+      
+      console.log('处理后的分组数据:', groups)
     }
   } catch (error) {
     console.error('获取交易记录失败:', error)
@@ -351,6 +580,140 @@ const getStockName = (code) => {
   return stock ? stock.name : ''
 }
 
+// 切换持仓股票显示
+const toggleHoldingStocks = (market) => {
+  const index = expandedHoldingStocks.value.indexOf(market)
+  if (index === -1) {
+    expandedHoldingStocks.value.push(market)
+  } else {
+    expandedHoldingStocks.value.splice(index, 1)
+  }
+}
+
+// 切换已清仓股票显示
+const toggleClosedStocks = (market) => {
+  const index = expandedClosedStocks.value.indexOf(market)
+  if (index === -1) {
+    expandedClosedStocks.value.push(market)
+  } else {
+    expandedClosedStocks.value.splice(index, 1)
+  }
+}
+
+// 检查持仓股票是否展开
+const isHoldingStocksExpanded = (market) => {
+  return expandedHoldingStocks.value.includes(market)
+}
+
+// 检查已清仓股票是否展开
+const isClosedStocksExpanded = (market) => {
+  return expandedClosedStocks.value.includes(market)
+}
+
+// 修改 groupedTransactions 计算属性
+const groupedTransactions = computed(() => {
+  const groups = {}
+  
+  transactions.value.forEach(transaction => {
+    const market = transaction.market
+    if (!groups[market]) {
+      groups[market] = {
+        total: {
+          buy_amount: 0,
+          sell_amount: 0,
+          fees: 0
+        },
+        holding_stocks: [],
+        closed_stocks: []
+      }
+    }
+    
+    // 根据是否有持仓数量来区分持仓和已清仓
+    const stockList = transaction.quantity > 0 ? groups[market].holding_stocks : groups[market].closed_stocks
+    
+    // 查找现有的股票记录
+    let stock = stockList.find(s => s.code === transaction.stock_code)
+    if (!stock) {
+      stock = {
+        market: transaction.market,
+        code: transaction.stock_code,
+        name: transaction.name,
+        quantity: transaction.quantity || 0,
+        total_buy: transaction.total_buy || 0,
+        total_sell: transaction.total_sell || 0,
+        total_fees: transaction.total_fees || 0,
+        realized_profit: transaction.realized_profit || 0,
+        current_price: transaction.current_price || 0,
+        market_value: transaction.market_value || 0,
+        total_profit: transaction.total_profit || 0,
+        profit_rate: transaction.profit_rate || 0
+      }
+      stockList.push(stock)
+    }
+    
+    // 更新市场汇总数据
+    groups[market].total.buy_amount += transaction.total_buy || 0
+    groups[market].total.sell_amount += transaction.total_sell || 0
+    groups[market].total.fees += transaction.total_fees || 0
+  })
+  
+  return groups
+})
+
+// 添加查看详情方法
+const showDetails = (stock) => {
+  // 实现查看详情的逻辑
+}
+
+// 添加导出方法
+const exportTransactions = (stock) => {
+  // 实现导出的逻辑
+}
+
+// 切换明细显示
+const toggleDetails = async (stock) => {
+  const key = `${stock.market}-${stock.code}`
+  console.log('切换明细显示:', key)
+  
+  const index = expandedStocks.value.indexOf(key)
+  if (index === -1) {
+    // 展开并获取数据
+    console.log('展开股票明细:', stock)
+    expandedStocks.value.push(key)
+    
+    try {
+      const params = new URLSearchParams()
+      params.append('market', stock.market)
+      params.append('stock_codes[]', stock.code)
+      
+      console.log('发送请求获取交易明细:', `/api/profit/?${params.toString()}`)
+      const response = await axios.get(`/api/profit/?${params.toString()}`)
+      console.log('获取到的响应:', response.data)
+      
+      if (response.data.success) {
+        if (response.data.data.transaction_details) {
+          const details = response.data.data.transaction_details[key] || []
+          console.log('处理后的交易明细:', details)
+          transactionDetails.value[key] = details
+        } else {
+          console.warn('响应中没有 transaction_details 数据')
+          transactionDetails.value[key] = []
+        }
+      } else {
+        console.error('获取交易明细失败:', response.data.message)
+        transactionDetails.value[key] = []
+      }
+    } catch (error) {
+      console.error('获取交易明细失败:', error)
+      transactionDetails.value[key] = []
+    }
+  } else {
+    // 收起
+    console.log('收起股票明细:', key)
+    expandedStocks.value.splice(index, 1)
+  }
+}
+
 // 初始化
 onMounted(() => {
   fetchStocks()
@@ -384,12 +747,20 @@ onMounted(() => {
 /* 按钮样式 */
 .btn-sm {
   padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
+  line-height: 1.2;
+  border-radius: 0.2rem;
 }
 
-.btn-group-sm > .btn {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+.btn-sm:hover {
+  background-color: #e9ecef;
+}
+
+.btn-sm .fas {
+  font-size: 1.25rem;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
 }
 
 /* 文本样式 */
@@ -469,5 +840,83 @@ onMounted(() => {
     width: 100%;
     justify-content: space-between;
   }
+}
+
+/* 添加交易明细样式 */
+.transaction-details {
+  background-color: #f8f9fa;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.transaction-details .table {
+  background-color: white;
+  margin-bottom: 0;
+}
+
+.transaction-details th,
+.transaction-details td {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.transaction-details th {
+  background-color: #f1f3f5;
+  font-weight: 500;
+  color: #495057;
+}
+
+.transaction-details td {
+  vertical-align: middle;
+}
+
+.transaction-details tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* 展开按钮样式 */
+.expand-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.expand-btn:hover {
+  background-color: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+.expand-btn .fas {
+  font-size: 1.25rem;
+  margin: 0;
+  width: auto;
+}
+
+.expand-btn .fa-plus-square,
+.expand-btn .fa-plus-circle {
+  color: #0d6efd;
+}
+
+.expand-btn .fa-minus-square,
+.expand-btn .fa-minus-circle {
+  color: #dc3545;
+}
+
+.expand-btn:hover .fa-plus-square,
+.expand-btn:hover .fa-plus-circle {
+  color: #0a58ca;
+}
+
+.expand-btn:hover .fa-minus-square,
+.expand-btn:hover .fa-minus-circle {
+  color: #b02a37;
 }
 </style> 
