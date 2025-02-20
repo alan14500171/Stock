@@ -280,6 +280,8 @@ def get_profit_stats():
 
         # 处理交易明细数据
         transaction_details_dict = {}
+        current_transaction = None
+        
         for detail in transaction_details:
             market = detail['market']
             stock_code = detail['stock_code']
@@ -288,28 +290,33 @@ def get_profit_stats():
             if key not in transaction_details_dict:
                 transaction_details_dict[key] = []
             
-            # 添加交易明细
-            transaction_details_dict[key].append({
-                'id': detail['id'],
-                'transaction_code': detail['transaction_code'],
-                'transaction_type': detail['transaction_type'],
-                'transaction_date': detail['transaction_date'].isoformat() if detail['transaction_date'] else None,
-                'total_amount': float(detail['total_amount'] or 0),
-                'total_amount_hkd': float(detail['total_amount_hkd'] or 0),
-                'total_quantity': float(detail['total_quantity'] or 0),
-                'exchange_rate': float(detail['exchange_rate'] or 1),
-                'broker_fee': float(detail['broker_fee'] or 0),
-                'stamp_duty': float(detail['stamp_duty'] or 0),
-                'transaction_levy': float(detail['transaction_levy'] or 0),
-                'trading_fee': float(detail['trading_fee'] or 0),
-                'deposit_fee': float(detail['deposit_fee'] or 0),
-                'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
-                'details': [{
+            transaction_id = detail['id']
+            if not current_transaction or current_transaction['id'] != transaction_id:
+                current_transaction = {
+                    'id': transaction_id,
+                    'transaction_code': detail['transaction_code'],
+                    'transaction_type': detail['transaction_type'].upper(),
+                    'transaction_date': detail['transaction_date'].isoformat() if detail['transaction_date'] else None,
+                    'total_amount': float(detail['total_amount'] or 0),
+                    'total_amount_hkd': float(detail['total_amount_hkd'] or 0),
+                    'total_quantity': float(detail['total_quantity'] or 0),
+                    'exchange_rate': float(detail['exchange_rate'] or 1),
+                    'broker_fee': float(detail['broker_fee'] or 0),
+                    'stamp_duty': float(detail['stamp_duty'] or 0),
+                    'transaction_levy': float(detail['transaction_levy'] or 0),
+                    'trading_fee': float(detail['trading_fee'] or 0),
+                    'deposit_fee': float(detail['deposit_fee'] or 0),
+                    'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
+                    'details': []
+                }
+                transaction_details_dict[key].append(current_transaction)
+            
+            if detail['detail_quantity'] is not None:
+                current_transaction['details'].append({
                     'quantity': float(detail['detail_quantity'] or 0),
                     'price': float(detail['detail_price'] or 0),
                     'amount': float(detail['detail_amount'] or 0)
-                }] if detail['detail_quantity'] is not None else []
-            })
+                })
 
         return jsonify({
             'success': True,

@@ -4,11 +4,11 @@
       <h4 class="mb-0">盈利统计</h4>
       <div class="btn-group">
         <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleSearch">
-          <i class="bi bi-search"></i>
-          搜索
+          <i :class="['bi', searchVisible ? 'bi-chevron-up' : 'bi-search']"></i>
+          {{ searchVisible ? '收起' : '搜索' }}
         </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" @click="refreshMarketValue" :disabled="loading">
-          <i :class="['bi', loading ? 'bi-arrow-clockwise' : 'bi-arrow-repeat']"></i>
+        <button type="button" class="btn btn-sm btn-outline-primary" @click="refreshMarketValue" :disabled="loading">
+          <i :class="['bi', loading ? 'bi-arrow-clockwise bi-spin' : 'bi-arrow-clockwise']"></i>
           刷新市值
         </button>
         <button type="button" class="btn btn-sm btn-primary" @click="addTransaction">
@@ -55,7 +55,7 @@
         <table class="table table-hover table-sm mb-0">
           <thead class="table-light">
             <tr>
-              <th style="width: 30px"></th>
+              <th></th>
               <th>名称</th>
               <th class="text-end">数量</th>
               <th class="text-end">笔数</th>
@@ -72,10 +72,12 @@
           </thead>
           <tbody>
             <template v-for="(marketData, market) in marketStats" :key="market">
-              <!-- 市场汇总行 -->
-              <tr class="market-row" @click="toggleMarket(market)">
-                <td class="text-center">
-                  <i :class="['bi', isMarketExpanded(market) ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
+              <!-- 市场汇总 -->
+              <tr class="market-row">
+                <td>
+                  <button @click="toggleMarket(market)" class="btn btn-sm btn-outline-primary">
+                    <i :class="['bi bi-chevron-right', { 'rotate-90': isMarketExpanded(market) }]"></i>
+                  </button>
                 </td>
                 <td>{{ market }}</td>
                 <td class="text-end">-</td>
@@ -97,85 +99,177 @@
                 </td>
               </tr>
 
+              <!-- 持仓股票 -->
               <template v-if="isMarketExpanded(market)">
-                <!-- 持仓股票组 -->
-                <tr class="group-row holding-group" @click="toggleHoldingGroup(market)">
-                  <td class="text-center">
-                    <i :class="['bi', isHoldingGroupExpanded(market) ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
+                <tr class="holding-group-row">
+                  <td>
+                    <button @click="toggleHoldingGroup(market)" class="btn btn-sm btn-outline-secondary">
+                      <i :class="['bi bi-chevron-right', { 'rotate-90': isHoldingGroupExpanded(market) }]"></i>
+                    </button>
                   </td>
-                  <td colspan="12">
-                    <i class="bi bi-graph-up text-success"></i>
-                    持仓股票
-                    <span class="badge bg-secondary ms-2">{{ getHoldingStocks(market).length }}</span>
-                  </td>
+                  <td colspan="12"><strong>持仓股票</strong></td>
                 </tr>
 
                 <template v-if="isHoldingGroupExpanded(market)">
-                  <tr v-for="stock in getHoldingStocks(market)" :key="stock.code" class="stock-row holding-stock">
-                    <td></td>
-                    <td>
-                      {{ stock.code }}
-                      <br>
-                      <small class="text-muted">{{ stock.name }}</small>
-                    </td>
-                    <td class="text-end">{{ stock.quantity || '-' }}</td>
-                    <td class="text-end">{{ stock.transaction_count }}</td>
-                    <td class="text-end text-danger">{{ formatNumber(stock.total_buy) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.average_cost, 3) }}</td>
-                    <td class="text-end text-success">{{ formatNumber(stock.total_sell) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
-                    <td class="text-end" :class="getProfitClass(stock.realized_profit)">
-                      {{ formatNumber(stock.realized_profit) }}
-                    </td>
-                    <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
-                    <td class="text-end" :class="getProfitClass(stock.total_profit)">
-                      {{ formatNumber(stock.total_profit) }}
-                    </td>
-                    <td class="text-end" :class="getProfitClass(stock.profit_rate)">
-                      {{ formatRate(stock.profit_rate) }}
-                    </td>
-                  </tr>
+                  <template v-for="stock in getHoldingStocks(market)" :key="stock.code">
+                    <tr class="stock-row">
+                      <td>
+                        <button @click="toggleStock(market, stock.code)" class="btn btn-sm btn-outline-secondary">
+                          <i :class="['bi bi-chevron-right', { 'rotate-90': isStockExpanded(market, stock.code) }]"></i>
+                        </button>
+                      </td>
+                      <td>{{ stock.code }} <br> <small class="text-muted">{{ stock.name }}</small></td>
+                      <td class="text-end">{{ stock.quantity || '-' }}</td>
+                      <td class="text-end">{{ stock.transaction_count }}</td>
+                      <td class="text-end text-danger">{{ formatNumber(stock.total_buy) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.average_cost, 3) }}</td>
+                      <td class="text-end text-success">{{ formatNumber(stock.total_sell) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
+                      <td class="text-end" :class="getProfitClass(stock.realized_profit)">
+                        {{ formatNumber(stock.realized_profit) }}
+                      </td>
+                      <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
+                      <td class="text-end" :class="getProfitClass(stock.total_profit)">
+                        {{ formatNumber(stock.total_profit) }}
+                      </td>
+                      <td class="text-end" :class="getProfitClass(stock.profit_rate)">
+                        {{ formatRate(stock.profit_rate) }}
+                      </td>
+                    </tr>
+                    <!-- 交易明细行 -->
+                    <tr v-if="isStockExpanded(market, stock.code)">
+                      <td colspan="13" class="p-0">
+                        <div class="transaction-details">
+                          <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>交易日期</th>
+                                <th>交易编号</th>
+                                <th>类型</th>
+                                <th class="text-end">数量</th>
+                                <th class="text-end">价格</th>
+                                <th class="text-end">金额</th>
+                                <th class="text-end">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template v-if="transactionDetails[`${market}-${stock.code}`]">
+                                <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
+                                  <td>{{ formatDate(detail.transaction_date) }}</td>
+                                  <td>{{ detail.transaction_code }}</td>
+                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
+                                  <td class="text-end">
+                                    <template v-for="(d, index) in detail.details" :key="index">
+                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
+                                    </template>
+                                  </td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                </tr>
+                              </template>
+                              <tr v-else>
+                                <td colspan="9" class="text-center py-2">
+                                  <small class="text-muted">暂无交易明细数据</small>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
                 </template>
 
-                <!-- 已清仓股票组 -->
-                <tr class="group-row closed-group" @click="toggleClosedGroup(market)">
-                  <td class="text-center">
-                    <i :class="['bi', isClosedGroupExpanded(market) ? 'bi-chevron-down' : 'bi-chevron-right']"></i>
+                <!-- 已清仓股票 -->
+                <tr class="closed-group-row">
+                  <td>
+                    <button @click="toggleClosedGroup(market)" class="btn btn-sm btn-outline-secondary">
+                      <i :class="['bi bi-chevron-right', { 'rotate-90': isClosedGroupExpanded(market) }]"></i>
+                    </button>
                   </td>
-                  <td colspan="12">
-                    <i class="bi bi-check-circle text-secondary"></i>
-                    已清仓股票
-                    <span class="badge bg-secondary ms-2">{{ getClosedStocks(market).length }}</span>
-                  </td>
+                  <td colspan="12"><strong>已清仓股票</strong></td>
                 </tr>
 
                 <template v-if="isClosedGroupExpanded(market)">
-                  <tr v-for="stock in getClosedStocks(market)" :key="stock.code" class="stock-row closed-stock">
-                    <td></td>
-                    <td>
-                      {{ stock.code }}
-                      <br>
-                      <small class="text-muted">{{ stock.name }}</small>
-                    </td>
-                    <td class="text-end">{{ stock.quantity || '-' }}</td>
-                    <td class="text-end">{{ stock.transaction_count }}</td>
-                    <td class="text-end text-danger">{{ formatNumber(stock.total_buy) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.average_cost, 3) }}</td>
-                    <td class="text-end text-success">{{ formatNumber(stock.total_sell) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
-                    <td class="text-end" :class="getProfitClass(stock.realized_profit)">
-                      {{ formatNumber(stock.realized_profit) }}
-                    </td>
-                    <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
-                    <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
-                    <td class="text-end" :class="getProfitClass(stock.total_profit)">
-                      {{ formatNumber(stock.total_profit) }}
-                    </td>
-                    <td class="text-end" :class="getProfitClass(stock.profit_rate)">
-                      {{ formatRate(stock.profit_rate) }}
-                    </td>
-                  </tr>
+                  <template v-for="stock in getClosedStocks(market)" :key="stock.code">
+                    <tr class="stock-row">
+                      <td>
+                        <button @click="toggleStock(market, stock.code)" class="btn btn-sm btn-outline-secondary">
+                          <i :class="['bi bi-chevron-right', { 'rotate-90': isStockExpanded(market, stock.code) }]"></i>
+                        </button>
+                      </td>
+                      <td>{{ stock.code }} <br> <small class="text-muted">{{ stock.name }}</small></td>
+                      <td class="text-end">{{ stock.quantity || '-' }}</td>
+                      <td class="text-end">{{ stock.transaction_count }}</td>
+                      <td class="text-end text-danger">{{ formatNumber(stock.total_buy) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.average_cost, 3) }}</td>
+                      <td class="text-end text-success">{{ formatNumber(stock.total_sell) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.total_fees) }}</td>
+                      <td class="text-end" :class="getProfitClass(stock.realized_profit)">
+                        {{ formatNumber(stock.realized_profit) }}
+                      </td>
+                      <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
+                      <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
+                      <td class="text-end" :class="getProfitClass(stock.total_profit)">
+                        {{ formatNumber(stock.total_profit) }}
+                      </td>
+                      <td class="text-end" :class="getProfitClass(stock.profit_rate)">
+                        {{ formatRate(stock.profit_rate) }}
+                      </td>
+                    </tr>
+                    <!-- 交易明细行 -->
+                    <tr v-if="isStockExpanded(market, stock.code)">
+                      <td colspan="13" class="p-0">
+                        <div class="transaction-details">
+                          <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>交易日期</th>
+                                <th>交易编号</th>
+                                <th>类型</th>
+                                <th class="text-end">数量</th>
+                                <th class="text-end">价格</th>
+                                <th class="text-end">金额</th>
+                                <th class="text-end">费用</th>
+                                <th class="text-end">汇率</th>
+                                <th class="text-end">港币金额</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template v-if="transactionDetails[`${market}-${stock.code}`]">
+                                <tr v-for="detail in transactionDetails[`${market}-${stock.code}`]" :key="detail.id">
+                                  <td>{{ formatDate(detail.transaction_date) }}</td>
+                                  <td>{{ detail.transaction_code }}</td>
+                                  <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
+                                  <td class="text-end">
+                                    <template v-for="(d, index) in detail.details" :key="index">
+                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
+                                    </template>
+                                  </td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                </tr>
+                              </template>
+                              <tr v-else>
+                                <td colspan="9" class="text-center py-2">
+                                  <small class="text-muted">暂无交易明细数据</small>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
                 </template>
               </template>
             </template>
@@ -262,6 +356,15 @@ const formatRate = (value) => {
   return value.toFixed(2) + '%'
 }
 
+const formatDate = (date) => {
+  if (!date) return '-'
+  return new Date(date).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).replace(/\//g, '-')
+}
+
 const getProfitClass = (value) => {
   if (!value) return ''
   return value > 0 ? 'text-success' : value < 0 ? 'text-danger' : ''
@@ -271,7 +374,10 @@ const getProfitClass = (value) => {
 const isMarketExpanded = (market) => expandedMarkets.value.has(market)
 const isHoldingGroupExpanded = (market) => expandedHoldingGroups.value.has(market)
 const isClosedGroupExpanded = (market) => expandedClosedGroups.value.has(market)
-const isStockExpanded = (stockKey) => expandedStocks.value.has(stockKey)
+const isStockExpanded = (market, code) => {
+  const stockKey = `${market}-${code}`
+  return expandedStocks.value.has(stockKey)
+}
 
 const toggleMarket = (market) => {
   if (expandedMarkets.value.has(market)) {
@@ -301,37 +407,12 @@ const toggleClosedGroup = (market) => {
   }
 }
 
-const toggleStock = async (market, code) => {
+const toggleStock = (market, code) => {
   const stockKey = `${market}-${code}`
   if (expandedStocks.value.has(stockKey)) {
     expandedStocks.value.delete(stockKey)
   } else {
     expandedStocks.value.add(stockKey)
-    await loadTransactionDetails(market, code)
-  }
-}
-
-const loadTransactionDetails = async (market, code) => {
-  const stockKey = `${market}-${code}`
-  if (transactionDetails.value[stockKey]) return
-
-  try {
-    loading.value = true
-    const response = await axios.get('/api/stock/transactions', {
-      params: {
-        market,
-        stock_code: code,
-        start_date: searchForm.startDate,
-        end_date: searchForm.endDate
-      }
-    })
-    if (response.data.success) {
-      transactionDetails.value[stockKey] = response.data.data.items
-    }
-  } catch (error) {
-    console.error('获取交易明细失败:', error)
-  } finally {
-    loading.value = false
   }
 }
 
@@ -368,6 +449,7 @@ const search = async () => {
     if (response.data.success) {
       marketStats.value = response.data.data.market_stats
       stockStats.value = response.data.data.stock_stats
+      transactionDetails.value = response.data.data.transaction_details || {}
       // 默认展开所有市场
       expandAll()
     }
@@ -429,28 +511,140 @@ onMounted(() => {
 <style scoped>
 .market-row {
   background-color: #f8f9fa;
-  cursor: pointer;
 }
 
-.group-row {
+.holding-group-row,
+.closed-group-row {
   background-color: #f8f9fa;
-  cursor: pointer;
 }
 
-.holding-group {
-  border-left: 4px solid #198754;
+.stock-row {
+  background-color: #ffffff;
 }
 
-.closed-group {
-  border-left: 4px solid #6c757d;
+.stock-row:hover {
+  background-color: #f8f9fa;
 }
 
-.holding-stock {
-  border-left: 4px solid #198754;
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #495057;
+  transition: all 0.2s;
+  margin: 2px;
+  position: relative;
+  z-index: 1;
 }
 
-.closed-stock {
-  border-left: 4px solid #6c757d;
+.btn-sm:hover {
+  background: transparent;
+}
+
+.btn-sm:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.btn-sm .bi {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+  position: relative;
+  z-index: 2;
+  font-weight: bold;
+  stroke-width: 1px;
+}
+
+/* 市场行按钮样式 */
+.market-row .btn-sm {
+  background: transparent;
+  border: none;
+}
+
+.market-row .btn-sm .bi {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  font-weight: bold;
+}
+
+.market-row .btn-sm .bi-chevron-right {
+  color: #495057;
+  transform: rotate(0deg);
+}
+
+/* 分组行按钮样式 */
+.holding-group-row .btn-sm,
+.closed-group-row .btn-sm {
+  background: transparent;
+  border: none;
+}
+
+.holding-group-row .btn-sm .bi,
+.closed-group-row .btn-sm .bi {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  font-weight: bold;
+}
+
+.holding-group-row .btn-sm .bi-chevron-right,
+.closed-group-row .btn-sm .bi-chevron-right {
+  color: #495057;
+  transform: rotate(0deg);
+}
+
+/* 股票行按钮样式 */
+.stock-row .btn-sm {
+  background: transparent;
+  border: none;
+}
+
+.stock-row .btn-sm .bi {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  font-weight: bold;
+}
+
+.stock-row .btn-sm .bi-chevron-right {
+  color: #495057;
+  transform: rotate(0deg);
+}
+
+/* 交易明细表格样式 */
+.transaction-details {
+  background-color: #ffffff;
+  padding: 0.5rem;
+}
+
+.transaction-details .table {
+  margin-bottom: 0;
+}
+
+.transaction-details td {
+  background-color: #ffffff;
+}
+
+/* 旋转动画 */
+@keyframes bi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.bi-spin {
+  display: inline-block;
+  animation: bi-spin 1s linear infinite;
 }
 
 .text-success {
@@ -471,27 +665,7 @@ onMounted(() => {
   vertical-align: middle;
 }
 
-.table .market-row {
-  font-weight: 500;
-}
-
 .small {
   font-size: 0.875rem;
-}
-
-.stock-row:hover {
-  background-color: rgba(0, 0, 0, 0.02);
-}
-
-.stock-row td {
-  padding-left: 1rem;
-}
-
-.stock-row small {
-  font-size: 0.75rem;
-}
-
-.badge {
-  font-weight: normal;
 }
 </style> 
