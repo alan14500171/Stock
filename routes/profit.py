@@ -188,12 +188,27 @@ def get_profit_stats():
                 FROM stock_transactions t
                 LEFT JOIN stocks s ON t.stock_code = s.code COLLATE utf8mb4_unicode_ci 
                     AND t.market = s.market COLLATE utf8mb4_unicode_ci
-                WHERE t.user_id = %s
+                WHERE {where_clause}
                 ORDER BY t.market, t.stock_code, t.transaction_date, t.created_at
             ),
             running_totals AS (
                 SELECT 
                     t1.*,
+                    @prev_qty := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        @qty,
+                        0
+                    ) as prev_qty,
+                    @prev_cost := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        @cost,
+                        0
+                    ) as prev_cost,
+                    @prev_avg_cost := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci AND @qty > 0,
+                        @cost / @qty,
+                        0
+                    ) as prev_avg_cost,
                     @qty := IF(
                         @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
                         IF(
@@ -220,24 +235,9 @@ def get_profit_stats():
                             0
                         )
                     ) as running_cost,
-                    @prev_qty := IF(
-                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
-                        @qty,
-                        0
-                    ) as prev_qty,
-                    @prev_cost := IF(
-                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
-                        @cost,
-                        0
-                    ) as prev_cost,
-                    @sold_cost := IF(
-                        t1.transaction_type = 'sell' AND @prev_qty > 0,
-                        @prev_cost * (t1.total_quantity / @prev_qty),
-                        0
-                    ) as sold_cost,
                     @current_stock := CONCAT(t1.market, t1.stock_code) as _group_key
                 FROM (
-                    SELECT @qty := 0, @cost := 0, @current_stock := '', @prev_qty := 0, @prev_cost := 0, @sold_cost := 0
+                    SELECT @qty := 0, @cost := 0, @current_stock := '', @prev_qty := 0, @prev_cost := 0, @prev_avg_cost := 0
                 ) vars, base_transactions t1
             )
             SELECT 
@@ -272,7 +272,7 @@ def get_profit_stats():
                     ELSE 0
                 END as current_average_cost,
                 CASE 
-                    WHEN t.transaction_type = 'sell' AND prev_qty > 0 THEN sold_cost / t.total_quantity
+                    WHEN t.transaction_type = 'sell' THEN prev_avg_cost
                     ELSE NULL
                 END as sold_average_cost
             FROM running_totals t
@@ -282,14 +282,14 @@ def get_profit_stats():
                 t.transaction_date, t.transaction_code, t.total_amount, t.total_quantity,
                 t.exchange_rate, t.broker_fee, t.stamp_duty, t.transaction_levy,
                 t.trading_fee, t.deposit_fee, t.total_fees_hkd,
-                t.running_quantity, t.running_cost, t.prev_qty, t.prev_cost, t.sold_cost
+                t.running_quantity, t.running_cost, t.prev_qty, t.prev_cost, t.prev_avg_cost
             ORDER BY t.transaction_date DESC, t.created_at DESC
         """
 
         # 执行查询
         market_params = base_params.copy()
         stock_params = base_params.copy()
-        details_params = base_params.copy()  # 修改这里，不再重复参数
+        details_params = base_params.copy()  # 使用相同的参数列表
 
         market_stats = db.fetch_all(market_sql, market_params)
         stock_stats = db.fetch_all(stock_sql, stock_params)
@@ -389,6 +389,7 @@ def get_profit_stats():
                 'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
                 'current_quantity': float(detail['current_quantity'] or 0),
                 'current_average_cost': float(detail['current_average_cost'] or 0),
+                'sold_average_cost': float(detail['sold_average_cost'] or 0),
                 'details': []
             }
             

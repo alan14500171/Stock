@@ -531,8 +531,9 @@ const search = async () => {
     if (searchForm.startDate) params.append('start_date', searchForm.startDate)
     if (searchForm.endDate) params.append('end_date', searchForm.endDate)
     if (searchForm.market) params.append('market', searchForm.market)
+    params.append('details', 'true')
     
-    const response = await axios.get('/api/profit', { params })
+    const response = await axios.get('/api/profit/', { params })
     if (response.data.success) {
       marketStats.value = response.data.data.market_stats
       stockStats.value = response.data.data.stock_stats
