@@ -189,7 +189,7 @@ def get_profit_stats():
                 LEFT JOIN stocks s ON t.stock_code = s.code COLLATE utf8mb4_unicode_ci 
                     AND t.market = s.market COLLATE utf8mb4_unicode_ci
                 WHERE {where_clause}
-                ORDER BY t.market, t.stock_code, t.transaction_date, t.created_at
+                ORDER BY t.market, t.stock_code, t.transaction_date, t.id
             ),
             running_totals AS (
                 SELECT 
@@ -207,7 +207,11 @@ def get_profit_stats():
                     @prev_avg_cost := IF(
                         @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci AND @qty > 0,
                         @cost / @qty,
-                        0
+                        IF(
+                            @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                            @prev_avg_cost,
+                            0
+                        )
                     ) as prev_avg_cost,
                     @qty := IF(
                         @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
@@ -283,7 +287,7 @@ def get_profit_stats():
                 t.exchange_rate, t.broker_fee, t.stamp_duty, t.transaction_levy,
                 t.trading_fee, t.deposit_fee, t.total_fees_hkd,
                 t.running_quantity, t.running_cost, t.prev_qty, t.prev_cost, t.prev_avg_cost
-            ORDER BY t.transaction_date DESC, t.created_at DESC
+            ORDER BY t.transaction_date DESC, t.id DESC
         """
 
         # 执行查询
@@ -359,52 +363,97 @@ def get_profit_stats():
         # 处理交易明细数据
         transaction_details_dict = {}
         
+        # 按市场和股票代码分组处理交易记录
+        grouped_details = {}
         for detail in transaction_details:
             market = detail['market']
             stock_code = detail['stock_code']
             key = f"{market}-{stock_code}"
             
-            if key not in transaction_details_dict:
-                transaction_details_dict[key] = []
+            if key not in grouped_details:
+                grouped_details[key] = []
+            grouped_details[key].append(detail)
+        
+        # 对每个分组计算移动加权平均价
+        for key, details in grouped_details.items():
+            # 按交易日期和ID正序排序（时间升序）
+            sorted_details = sorted(details, key=lambda x: (x['transaction_date'], x['id']))
             
-            # 处理交易日期
-            transaction_date = detail['transaction_date']
-            formatted_date = transaction_date.strftime('%Y-%m-%dT%H:%M:%S') if transaction_date else None
+            # 初始化变量
+            quantity = 0  # 当前持仓数量
+            total_cost = 0  # 当前总成本
+            avg_cost = 0  # 当前平均成本
+            transaction_details_dict[key] = []
             
-            # 创建交易记录
-            transaction = {
-                'id': detail['id'],
-                'transaction_code': detail['transaction_code'],
-                'transaction_type': detail['transaction_type'].upper(),
-                'transaction_date': formatted_date,
-                'total_amount': float(detail['total_amount'] or 0),
-                'total_quantity': float(detail['total_quantity'] or 0),
-                'unit_price': float(detail['total_amount'] or 0) / float(detail['total_quantity'] or 1),
-                'exchange_rate': float(detail['exchange_rate'] or 1),
-                'broker_fee': float(detail['broker_fee'] or 0),
-                'stamp_duty': float(detail['stamp_duty'] or 0),
-                'transaction_levy': float(detail['transaction_levy'] or 0),
-                'trading_fee': float(detail['trading_fee'] or 0),
-                'deposit_fee': float(detail['deposit_fee'] or 0),
-                'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
-                'current_quantity': float(detail['current_quantity'] or 0),
-                'current_average_cost': float(detail['current_average_cost'] or 0),
-                'sold_average_cost': float(detail['sold_average_cost'] or 0),
-                'details': []
-            }
+            # 第一次遍历：计算每个时点的移动加权平均价
+            for detail in sorted_details:
+                if detail['transaction_type'].lower() == 'buy':
+                    # 买入时，更新总成本和持仓数量
+                    new_quantity = detail['total_quantity']
+                    new_cost = detail['total_amount']
+                    
+                    # 更新总持仓和总成本
+                    quantity += new_quantity
+                    total_cost += new_cost
+                    
+                    # 计算新的平均成本
+                    avg_cost = total_cost / quantity if quantity > 0 else 0
+                    
+                    # 保存这条记录的平均成本
+                    detail['avg_cost'] = avg_cost
+                else:
+                    # 卖出时，记录当前的平均成本
+                    detail['avg_cost'] = avg_cost
+                    
+                    # 更新持仓数量
+                    quantity -= detail['total_quantity']
+                    
+                    # 如果还有剩余持仓，按比例减少总成本
+                    if quantity > 0:
+                        total_cost = avg_cost * quantity
+                    else:
+                        # 清仓后重置总成本
+                        total_cost = 0
+                        avg_cost = 0
             
-            # 处理明细数据
-            if detail['detail_info']:
-                for detail_str in detail['detail_info'].split(','):
-                    quantity, price, amount = detail_str.split('@')
-                    if quantity and price and amount:
-                        transaction['details'].append({
-                            'quantity': float(quantity),
-                            'price': float(price),
-                            'amount': float(amount)
-                        })
-            
-            transaction_details_dict[key].append(transaction)
+            # 第二次遍历：创建最终的交易记录（按时间倒序）
+            for detail in reversed(sorted_details):
+                transaction_date = detail['transaction_date']
+                formatted_date = transaction_date.strftime('%Y-%m-%dT%H:%M:%S') if transaction_date else None
+                
+                # 创建交易记录
+                transaction = {
+                    'id': detail['id'],
+                    'transaction_code': detail['transaction_code'],
+                    'transaction_type': detail['transaction_type'].upper(),
+                    'transaction_date': formatted_date,
+                    'total_amount': float(detail['total_amount'] or 0),
+                    'total_quantity': float(detail['total_quantity'] or 0),
+                    'unit_price': float(detail['total_amount'] or 0) / float(detail['total_quantity'] or 1),
+                    'exchange_rate': float(detail['exchange_rate'] or 1),
+                    'broker_fee': float(detail['broker_fee'] or 0),
+                    'stamp_duty': float(detail['stamp_duty'] or 0),
+                    'transaction_levy': float(detail['transaction_levy'] or 0),
+                    'trading_fee': float(detail['trading_fee'] or 0),
+                    'deposit_fee': float(detail['deposit_fee'] or 0),
+                    'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
+                    'sold_average_cost': float(detail['avg_cost']) if detail['transaction_type'].lower() == 'sell' else None,
+                    'details': []
+                }
+                
+                # 处理明细数据
+                if detail['detail_info']:
+                    for detail_str in detail['detail_info'].split(','):
+                        quantity_str, price_str, amount_str = detail_str.split('@')
+                        if quantity_str and price_str and amount_str:
+                            transaction['details'].append({
+                                'quantity': float(quantity_str),
+                                'price': float(price_str),
+                                'amount': float(amount_str)
+                            })
+                
+                # 将交易记录添加到列表
+                transaction_details_dict[key].append(transaction)
 
         return jsonify({
             'success': True,
