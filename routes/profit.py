@@ -252,7 +252,6 @@ def get_profit_stats():
                         COALESCE(td.quantity * td.price, '')
                     ) ORDER BY td.id ASC
                 ) as detail_info,
-                t.unit_cost,
                 t.running_quantity as current_quantity,
                 t.avg_cost as current_average_cost
             FROM running_totals t
@@ -368,9 +367,8 @@ def get_profit_stats():
                 'trading_fee': float(detail['trading_fee'] or 0),
                 'deposit_fee': float(detail['deposit_fee'] or 0),
                 'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
-                'unit_cost': float(detail['prev_avg_cost'] or 0),
-                'current_quantity': float(detail['running_quantity'] or 0),
-                'current_average_cost': float(detail['avg_cost'] or 0),
+                'current_quantity': float(detail['current_quantity'] or 0),
+                'current_average_cost': float(detail['current_average_cost'] or 0),
                 'transaction_profit': float(detail['transaction_profit'] or 0),
                 'details': []
             }

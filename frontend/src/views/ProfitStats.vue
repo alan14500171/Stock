@@ -71,7 +71,7 @@
             </tr>
           </thead>
           <tbody>
-            <template v-for="(marketData, market) in marketStats" :key="market">
+            <template v-for="market in getMarkets" :key="market">
               <!-- 市场汇总 -->
               <tr class="market-row">
                 <td>
@@ -81,21 +81,21 @@
                 </td>
                 <td>{{ market }}</td>
                 <td class="text-end">-</td>
-                <td class="text-end">{{ marketData.transaction_count }}</td>
-                <td class="text-end text-danger">{{ formatNumber(marketData.total_buy) }}</td>
+                <td class="text-end">{{ marketStats[market].transaction_count }}</td>
+                <td class="text-end text-danger">{{ formatNumber(marketStats[market].total_buy) }}</td>
                 <td class="text-end">-</td>
-                <td class="text-end text-success">{{ formatNumber(marketData.total_sell) }}</td>
-                <td class="text-end">{{ formatNumber(marketData.total_fees) }}</td>
-                <td class="text-end" :class="getProfitClass(marketData.realized_profit)">
-                  {{ formatNumber(marketData.realized_profit) }}
+                <td class="text-end text-success">{{ formatNumber(marketStats[market].total_sell) }}</td>
+                <td class="text-end">{{ formatNumber(marketStats[market].total_fees) }}</td>
+                <td class="text-end" :class="getProfitClass(marketStats[market].realized_profit)">
+                  {{ formatNumber(marketStats[market].realized_profit) }}
                 </td>
                 <td class="text-end">-</td>
-                <td class="text-end">{{ formatNumber(marketData.market_value) }}</td>
-                <td class="text-end" :class="getProfitClass(marketData.total_profit)">
-                  {{ formatNumber(marketData.total_profit) }}
+                <td class="text-end">{{ formatNumber(marketStats[market].market_value) }}</td>
+                <td class="text-end" :class="getProfitClass(marketStats[market].total_profit)">
+                  {{ formatNumber(marketStats[market].total_profit) }}
                 </td>
-                <td class="text-end" :class="getProfitClass(marketData.profit_rate)">
-                  {{ formatRate(marketData.profit_rate) }}
+                <td class="text-end" :class="getProfitClass(marketStats[market].profit_rate)">
+                  {{ formatRate(marketStats[market].profit_rate) }}
                 </td>
               </tr>
 
@@ -148,7 +148,7 @@
                                 <th class="quantity-price">数量@单价</th>
                                 <th class="text-end amount">买入金额</th>
                                 <th class="text-end amount">卖出金额</th>
-                                <th class="text-end cost">成本价</th>
+                                <th class="text-end cost">移动加权平均价</th>
                                 <th class="text-end fees">费用</th>
                                 <th class="text-end">汇率</th>
                                 <th class="text-end">港币金额</th>
@@ -176,7 +176,7 @@
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
                                   <td class="text-end cost">
-                                    {{ formatNumber(detail.unit_cost, 3) }}
+                                    {{ formatNumber(detail.current_average_cost, 3) }}
                                   </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
@@ -250,10 +250,10 @@
                             <thead class="table-light">
                               <tr>
                                 <th class="transaction-info">交易日期</th>
-                                <th class="quantity-price">数量@单价</th>
+                                <th class="quantity-price">数量@均价</th>
                                 <th class="text-end amount">买入金额</th>
                                 <th class="text-end amount">卖出金额</th>
-                                <th class="text-end cost">成本价</th>
+                                <th class="text-end cost">移动加权平均价</th>
                                 <th class="text-end fees">费用</th>
                                 <th class="text-end">汇率</th>
                                 <th class="text-end">港币金额</th>
@@ -281,7 +281,7 @@
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
                                   <td class="text-end cost">
-                                    {{ formatNumber(detail.unit_cost, 3) }}
+                                    {{ formatNumber(detail.current_average_cost, 3) }}
                                   </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
@@ -319,7 +319,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import DateInput from '../components/DateInput.vue'
 import axios from 'axios'
@@ -369,7 +369,24 @@ const getHoldingStocks = (market) => {
   return Object.entries(stockStats.value)
     .filter(([_, stock]) => stock.market === market && stock.quantity > 0)
     .map(([code, stock]) => ({ code, ...stock }))
-    .sort((a, b) => b.market_value - a.market_value)
+    .sort((a, b) => {
+      // 按最新交易日期和创建时间排序
+      const aDetails = transactionDetails.value[`${market}-${a.code}`] || [];
+      const bDetails = transactionDetails.value[`${market}-${b.code}`] || [];
+      const aLatest = aDetails[0] || {};
+      const bLatest = bDetails[0] || {};
+      
+      // 先按交易日期排序
+      const dateA = new Date(aLatest.transaction_date || 0);
+      const dateB = new Date(bLatest.transaction_date || 0);
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateB.getTime() - dateA.getTime();
+      }
+      // 如果交易日期相同，按创建时间排序
+      const createA = new Date(aLatest.created_at || 0);
+      const createB = new Date(bLatest.created_at || 0);
+      return createB.getTime() - createA.getTime();
+    });
 }
 
 // 获取市场已清仓股票
@@ -377,8 +394,30 @@ const getClosedStocks = (market) => {
   return Object.entries(stockStats.value)
     .filter(([_, stock]) => stock.market === market && stock.quantity <= 0)
     .map(([code, stock]) => ({ code, ...stock }))
-    .sort((a, b) => b.total_profit - a.total_profit)
+    .sort((a, b) => {
+      // 按最新交易日期和创建时间排序
+      const aDetails = transactionDetails.value[`${market}-${a.code}`] || [];
+      const bDetails = transactionDetails.value[`${market}-${b.code}`] || [];
+      const aLatest = aDetails[0] || {};
+      const bLatest = bDetails[0] || {};
+      
+      // 先按交易日期排序
+      const dateA = new Date(aLatest.transaction_date || 0);
+      const dateB = new Date(bLatest.transaction_date || 0);
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateB.getTime() - dateA.getTime();
+      }
+      // 如果交易日期相同，按创建时间排序
+      const createA = new Date(aLatest.created_at || 0);
+      const createB = new Date(bLatest.created_at || 0);
+      return createB.getTime() - createA.getTime();
+    });
 }
+
+// 获取市场列表（按名称排序）
+const getMarkets = computed(() => {
+  return Object.keys(marketStats.value).sort();
+});
 
 // 格式化函数
 const formatNumber = (value, decimals = 2) => {
@@ -487,7 +526,16 @@ const search = async () => {
     if (response.data.success) {
       marketStats.value = response.data.data.market_stats
       stockStats.value = response.data.data.stock_stats
-      transactionDetails.value = response.data.data.transaction_details || {}
+      
+      // 处理交易明细数据，对每个股票的交易记录进行排序
+      const rawTransactionDetails = response.data.data.transaction_details || {}
+      transactionDetails.value = Object.fromEntries(
+        Object.entries(rawTransactionDetails).map(([key, details]) => [
+          key,
+          processTransactionDetails(details)
+        ])
+      )
+      
       // 默认展开所有市场
       expandAll()
     }
@@ -538,6 +586,24 @@ const handleEndDateChange = (value) => {
   if (searchForm.startDate && value < searchForm.startDate) {
     searchForm.startDate = value
   }
+}
+
+// 处理后端返回的数据
+const processTransactionDetails = (details) => {
+  if (!details) return [];
+  // 对交易明细按日期和创建时间降序排序
+  return [...details].sort((a, b) => {
+    // 先按交易日期排序
+    const dateA = new Date(a.transaction_date);
+    const dateB = new Date(b.transaction_date);
+    if (dateA.getTime() !== dateB.getTime()) {
+      return dateB.getTime() - dateA.getTime();
+    }
+    // 如果交易日期相同，按创建时间排序
+    const createA = new Date(a.created_at || 0);
+    const createB = new Date(b.created_at || 0);
+    return createB.getTime() - createA.getTime();
+  });
 }
 
 // 初始化
