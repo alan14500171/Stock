@@ -173,56 +173,72 @@ def get_profit_stats():
 
         # 获取交易明细数据
         details_sql = f"""
-            WITH running_totals AS (
+            WITH base_transactions AS (
                 SELECT 
                     t.*,
                     s.name as stock_name,
-                    -- 使用变量跟踪数量和成本
-                    @prev_qty := @qty as prev_qty,
-                    @qty := IF(t.transaction_type = 'buy', 
-                             @qty + t.total_quantity, 
-                             @qty - t.total_quantity) as running_quantity,
-                    
-                    -- 使用变量跟踪平均成本
-                    @prev_avg_cost := IF(@qty = 0, 0, @avg_cost) as prev_avg_cost,
-                    @avg_cost := IF(t.transaction_type = 'buy',
-                                  IF(@prev_qty = 0,
-                                     (t.total_amount + (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)) / t.total_quantity,
-                                     (@prev_qty * @prev_avg_cost + t.total_amount + (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)) / @qty),
-                                  @prev_avg_cost) as avg_cost,
-                    
-                    -- 计算每笔交易的盈亏
-                    CASE 
-                        WHEN t.transaction_type = 'sell' THEN 
-                            t.total_amount - (t.total_quantity * @prev_avg_cost) - 
-                            (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee)
-                        ELSE NULL 
-                    END as transaction_profit,
-                    
-                    -- 计算汇率转换后的金额
-                    t.total_amount * COALESCE(
-                        (SELECT rate FROM exchange_rates 
-                         WHERE currency = t.market 
-                         AND rate_date <= t.transaction_date 
-                         ORDER BY rate_date DESC LIMIT 1), 
-                        1
-                    ) as total_amount_hkd,
-                    
-                    -- 计算汇率转换后的费用
                     (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee) * 
                     COALESCE(
                         (SELECT rate FROM exchange_rates 
-                         WHERE currency = t.market 
+                         WHERE currency = t.market COLLATE utf8mb4_unicode_ci
                          AND rate_date <= t.transaction_date 
                          ORDER BY rate_date DESC LIMIT 1), 
                         1
                     ) as total_fees_hkd
-                FROM 
-                    (SELECT @qty := 0, @prev_qty := 0, @avg_cost := 0, @prev_avg_cost := 0) vars,
-                    stock_transactions t
-                    LEFT JOIN stocks s ON t.stock_code = s.code AND t.market = s.market
-                WHERE {where_clause}
-                ORDER BY t.transaction_date ASC, t.created_at ASC
+                FROM stock_transactions t
+                LEFT JOIN stocks s ON t.stock_code = s.code COLLATE utf8mb4_unicode_ci 
+                    AND t.market = s.market COLLATE utf8mb4_unicode_ci
+                WHERE t.user_id = %s
+                ORDER BY t.market, t.stock_code, t.transaction_date, t.created_at
+            ),
+            running_totals AS (
+                SELECT 
+                    t1.*,
+                    @qty := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        IF(
+                            t1.transaction_type = 'buy',
+                            @qty + t1.total_quantity,
+                            @qty - t1.total_quantity
+                        ),
+                        IF(
+                            t1.transaction_type = 'buy',
+                            t1.total_quantity,
+                            -t1.total_quantity
+                        )
+                    ) as running_quantity,
+                    @cost := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        IF(
+                            t1.transaction_type = 'buy',
+                            @cost + t1.total_amount + t1.broker_fee + t1.transaction_levy + t1.stamp_duty + t1.trading_fee + t1.deposit_fee,
+                            IF(@qty - t1.total_quantity > 0, @cost * ((@qty - t1.total_quantity) / @qty), 0)
+                        ),
+                        IF(
+                            t1.transaction_type = 'buy',
+                            t1.total_amount + t1.broker_fee + t1.transaction_levy + t1.stamp_duty + t1.trading_fee + t1.deposit_fee,
+                            0
+                        )
+                    ) as running_cost,
+                    @prev_qty := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        @qty,
+                        0
+                    ) as prev_qty,
+                    @prev_cost := IF(
+                        @current_stock = CONCAT(t1.market, t1.stock_code) COLLATE utf8mb4_unicode_ci,
+                        @cost,
+                        0
+                    ) as prev_cost,
+                    @sold_cost := IF(
+                        t1.transaction_type = 'sell' AND @prev_qty > 0,
+                        @prev_cost * (t1.total_quantity / @prev_qty),
+                        0
+                    ) as sold_cost,
+                    @current_stock := CONCAT(t1.market, t1.stock_code) as _group_key
+                FROM (
+                    SELECT @qty := 0, @cost := 0, @current_stock := '', @prev_qty := 0, @prev_cost := 0, @sold_cost := 0
+                ) vars, base_transactions t1
             )
             SELECT 
                 t.id,
@@ -240,9 +256,7 @@ def get_profit_stats():
                 t.transaction_levy,
                 t.trading_fee,
                 t.deposit_fee,
-                t.total_amount_hkd,
                 t.total_fees_hkd,
-                t.transaction_profit,
                 GROUP_CONCAT(
                     CONCAT(
                         COALESCE(td.quantity, ''),
@@ -252,16 +266,23 @@ def get_profit_stats():
                         COALESCE(td.quantity * td.price, '')
                     ) ORDER BY td.id ASC
                 ) as detail_info,
-                t.running_quantity as current_quantity,
-                t.avg_cost as current_average_cost
+                running_quantity as current_quantity,
+                CASE 
+                    WHEN running_quantity > 0 THEN running_cost / running_quantity
+                    ELSE 0
+                END as current_average_cost,
+                CASE 
+                    WHEN t.transaction_type = 'sell' AND prev_qty > 0 THEN sold_cost / t.total_quantity
+                    ELSE NULL
+                END as sold_average_cost
             FROM running_totals t
             LEFT JOIN stock_transaction_details td ON t.id = td.transaction_id
             GROUP BY 
                 t.id, t.market, t.stock_code, t.stock_name, t.transaction_type,
                 t.transaction_date, t.transaction_code, t.total_amount, t.total_quantity,
                 t.exchange_rate, t.broker_fee, t.stamp_duty, t.transaction_levy,
-                t.trading_fee, t.deposit_fee, t.total_amount_hkd, t.total_fees_hkd,
-                t.running_quantity, t.avg_cost, t.prev_avg_cost, t.transaction_profit
+                t.trading_fee, t.deposit_fee, t.total_fees_hkd,
+                t.running_quantity, t.running_cost, t.prev_qty, t.prev_cost, t.sold_cost
             ORDER BY t.transaction_date DESC, t.created_at DESC
         """
 
@@ -357,7 +378,6 @@ def get_profit_stats():
                 'transaction_type': detail['transaction_type'].upper(),
                 'transaction_date': formatted_date,
                 'total_amount': float(detail['total_amount'] or 0),
-                'total_amount_hkd': float(detail['total_amount_hkd'] or 0),
                 'total_quantity': float(detail['total_quantity'] or 0),
                 'unit_price': float(detail['total_amount'] or 0) / float(detail['total_quantity'] or 1),
                 'exchange_rate': float(detail['exchange_rate'] or 1),
@@ -369,7 +389,6 @@ def get_profit_stats():
                 'total_fees_hkd': float(detail['total_fees_hkd'] or 0),
                 'current_quantity': float(detail['current_quantity'] or 0),
                 'current_average_cost': float(detail['current_average_cost'] or 0),
-                'transaction_profit': float(detail['transaction_profit'] or 0),
                 'details': []
             }
             

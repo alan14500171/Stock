@@ -35,15 +35,25 @@ class Database:
                 read_timeout=30,
                 write_timeout=30,
                 max_allowed_packet=16*1024*1024,
-                program_name='StockApp'
+                program_name='StockApp',
+                init_command='SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci'
             )
             
             # 单独执行每个初始化命令
             with self.connection.cursor() as cursor:
+                # 设置会话变量
                 cursor.execute("SET SESSION sql_mode='STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'")
                 cursor.execute("SET SESSION time_zone='+8:00'")
                 cursor.execute("SET SESSION group_concat_max_len=1000000")
                 cursor.execute("SET SESSION windowing_use_high_precision=1")
+                
+                # 设置字符集和校对规则
+                cursor.execute("SET CHARACTER SET utf8mb4")
+                cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci")
+                cursor.execute("SET character_set_connection=utf8mb4")
+                cursor.execute("SET collation_connection=utf8mb4_unicode_ci")
+                cursor.execute("SET collation_server=utf8mb4_unicode_ci")
+                cursor.execute("SET collation_database=utf8mb4_unicode_ci")
             
             return True
         except Exception as e:

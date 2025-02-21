@@ -3,6 +3,16 @@ CREATE DATABASE IF NOT EXISTS Stock DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb
 
 USE stock;
 
+-- 修改数据库字符集
+ALTER DATABASE Stock CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 修改表字符集
+ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE stocks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE stock_transactions CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE stock_transaction_details CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE exchange_rates CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- 用户表
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -12,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     last_login DATETIME COMMENT '最后登录时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- 股票表
 CREATE TABLE IF NOT EXISTS stocks (
@@ -24,7 +34,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_code_market (code, market) COMMENT '股票代码和市场唯一索引'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='股票表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='股票表';
 
 -- 股票交易表
 CREATE TABLE IF NOT EXISTS stock_transactions (
@@ -49,7 +59,7 @@ CREATE TABLE IF NOT EXISTS stock_transactions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_stock (user_id, stock_code, market) COMMENT '用户股票索引',
     INDEX idx_transaction_date (transaction_date) COMMENT '交易日期索引'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='股票交易表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='股票交易表';
 
 -- 交易明细表
 CREATE TABLE IF NOT EXISTS stock_transaction_details (
@@ -60,7 +70,7 @@ CREATE TABLE IF NOT EXISTS stock_transaction_details (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (transaction_id) REFERENCES stock_transactions(id) ON DELETE CASCADE,
     INDEX idx_transaction (transaction_id) COMMENT '交易ID索引'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易明细表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='交易明细表';
 
 -- 汇率表
 CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -71,7 +81,7 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
     source VARCHAR(20) NOT NULL COMMENT '数据来源',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     UNIQUE KEY uk_currency_date (currency, rate_date) COMMENT '货币和日期唯一索引'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='汇率表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='汇率表';
 
 -- 添加注释
 ALTER TABLE users COMMENT '用户管理表';

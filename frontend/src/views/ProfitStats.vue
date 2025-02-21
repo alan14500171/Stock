@@ -176,7 +176,12 @@
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
                                   <td class="text-end cost">
-                                    {{ formatNumber(detail.current_average_cost, 3) }}
+                                    <template v-if="detail.transaction_type === 'BUY'">
+                                      {{ formatNumber(detail.current_average_cost, 3) }}
+                                    </template>
+                                    <template v-else>
+                                      {{ formatNumber(detail.sold_average_cost, 3) }}
+                                    </template>
                                   </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
@@ -185,10 +190,10 @@
                                     {{ formatNumber(detail.exchange_rate, 4) }}
                                   </td>
                                   <td class="text-end">
-                                    {{ formatNumber(detail.total_amount_hkd) }}
+                                    {{ formatNumber(calculateHKDAmount(detail)) }}
                                   </td>
-                                  <td class="text-end" :class="getProfitClass(detail.transaction_profit)">
-                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.transaction_profit) : '-' }}
+                                  <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
                                   </td>
                                 </tr>
                               </template>
@@ -281,7 +286,12 @@
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
                                   <td class="text-end cost">
-                                    {{ formatNumber(detail.current_average_cost, 3) }}
+                                    <template v-if="detail.transaction_type === 'BUY'">
+                                      {{ formatNumber(detail.current_average_cost, 3) }}
+                                    </template>
+                                    <template v-else>
+                                      {{ formatNumber(detail.sold_average_cost, 3) }}
+                                    </template>
                                   </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
@@ -290,10 +300,10 @@
                                     {{ formatNumber(detail.exchange_rate, 4) }}
                                   </td>
                                   <td class="text-end">
-                                    {{ formatNumber(detail.total_amount_hkd) }}
+                                    {{ formatNumber(calculateHKDAmount(detail)) }}
                                   </td>
-                                  <td class="text-end" :class="getProfitClass(detail.transaction_profit)">
-                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.transaction_profit) : '-' }}
+                                  <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
                                   </td>
                                 </tr>
                               </template>
@@ -604,6 +614,16 @@ const processTransactionDetails = (details) => {
     const createB = new Date(b.created_at || 0);
     return createB.getTime() - createA.getTime();
   });
+}
+
+// 在 script setup 部分添加计算函数
+const calculateHKDAmount = (detail) => {
+  return detail.total_amount * detail.exchange_rate;
+}
+
+const calculateProfit = (detail) => {
+  if (detail.transaction_type !== 'SELL') return 0;
+  return detail.total_quantity * detail.sold_average_cost - detail.total_amount - detail.total_fees_hkd;
 }
 
 // 初始化
