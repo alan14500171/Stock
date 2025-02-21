@@ -147,11 +147,9 @@
                                 <th class="transaction-info">交易日期</th>
                                 <th class="quantity-price">数量@单价</th>
                                 <th class="text-end amount">买入金额</th>
-                                <th class="text-end amount">卖出金额</th>
                                 <th class="text-end cost">移动加权平均价</th>
+                                <th class="text-end amount">卖出金额</th>
                                 <th class="text-end fees">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
                                 <th class="text-end">盈亏</th>
                               </tr>
                             </thead>
@@ -172,9 +170,6 @@
                                   <td class="text-end amount">
                                     {{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
-                                  <td class="text-end amount">
-                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
-                                  </td>
                                   <td class="text-end cost">
                                     <template v-if="detail.transaction_type === 'BUY'">
                                       {{ formatNumber(detail.current_average_cost, 3) }}
@@ -183,14 +178,11 @@
                                       {{ formatNumber(detail.sold_average_cost, 3) }}
                                     </template>
                                   </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
-                                  </td>
-                                  <td class="text-end">
-                                    {{ formatNumber(detail.exchange_rate, 4) }}
-                                  </td>
-                                  <td class="text-end">
-                                    {{ formatNumber(calculateHKDAmount(detail)) }}
                                   </td>
                                   <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
@@ -198,7 +190,7 @@
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="9" class="text-center py-2">
+                                <td colspan="7" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
@@ -255,13 +247,11 @@
                             <thead class="table-light">
                               <tr>
                                 <th class="transaction-info">交易日期</th>
-                                <th class="quantity-price">数量@均价</th>
+                                <th class="quantity-price">数量@单价</th>
                                 <th class="text-end amount">买入金额</th>
-                                <th class="text-end amount">卖出金额</th>
                                 <th class="text-end cost">移动加权平均价</th>
+                                <th class="text-end amount">卖出金额</th>
                                 <th class="text-end fees">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
                                 <th class="text-end">盈亏</th>
                               </tr>
                             </thead>
@@ -282,9 +272,6 @@
                                   <td class="text-end amount">
                                     {{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
-                                  <td class="text-end amount">
-                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
-                                  </td>
                                   <td class="text-end cost">
                                     <template v-if="detail.transaction_type === 'BUY'">
                                       {{ formatNumber(detail.current_average_cost, 3) }}
@@ -293,14 +280,11 @@
                                       {{ formatNumber(detail.sold_average_cost, 3) }}
                                     </template>
                                   </td>
+                                  <td class="text-end amount">
+                                    {{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}
+                                  </td>
                                   <td class="text-end fees">
                                     {{ formatNumber(detail.total_fees_hkd) }}
-                                  </td>
-                                  <td class="text-end">
-                                    {{ formatNumber(detail.exchange_rate, 4) }}
-                                  </td>
-                                  <td class="text-end">
-                                    {{ formatNumber(calculateHKDAmount(detail)) }}
                                   </td>
                                   <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
@@ -308,7 +292,7 @@
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="9" class="text-center py-2">
+                                <td colspan="7" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
@@ -624,7 +608,11 @@ const calculateHKDAmount = (detail) => {
 
 const calculateProfit = (detail) => {
   if (detail.transaction_type !== 'SELL') return 0;
-  return detail.total_quantity * detail.sold_average_cost - detail.total_amount - detail.total_fees_hkd;
+  // 卖出盈亏 = 卖出金额 - (卖出数量 * 卖出时移动加权平均价) - 卖出费用
+  const sellAmount = detail.total_amount;
+  const costAmount = detail.total_quantity * detail.sold_average_cost;
+  const fees = detail.total_fees_hkd;
+  return Number((sellAmount - costAmount - fees).toFixed(2));  // 保留两位小数
 }
 
 // 初始化

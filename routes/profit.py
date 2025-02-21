@@ -381,16 +381,23 @@ def get_profit_stats():
             
             # 初始化变量
             quantity = 0  # 当前持仓数量
-            total_cost = 0  # 当前总成本
+            total_cost = 0  # 当前总成本（包含买入费用）
             avg_cost = 0  # 当前平均成本
             transaction_details_dict[key] = []
             
             # 第一次遍历：计算每个时点的移动加权平均价
             for detail in sorted_details:
                 if detail['transaction_type'].lower() == 'buy':
-                    # 买入时，更新总成本和持仓数量
+                    # 买入时，更新总成本（包含费用）和持仓数量
                     new_quantity = detail['total_quantity']
-                    new_cost = detail['total_amount']
+                    # 买入总成本 = 买入金额 + 所有费用
+                    new_cost = detail['total_amount'] + (
+                        detail['broker_fee'] + 
+                        detail['transaction_levy'] + 
+                        detail['stamp_duty'] + 
+                        detail['trading_fee'] + 
+                        detail['deposit_fee']
+                    )
                     
                     # 更新总持仓和总成本
                     quantity += new_quantity
@@ -421,6 +428,15 @@ def get_profit_stats():
                 transaction_date = detail['transaction_date']
                 formatted_date = transaction_date.strftime('%Y-%m-%dT%H:%M:%S') if transaction_date else None
                 
+                # 计算总费用
+                total_fees = (
+                    detail['broker_fee'] + 
+                    detail['transaction_levy'] + 
+                    detail['stamp_duty'] + 
+                    detail['trading_fee'] + 
+                    detail['deposit_fee']
+                )
+                
                 # 创建交易记录
                 transaction = {
                     'id': detail['id'],
@@ -440,6 +456,17 @@ def get_profit_stats():
                     'sold_average_cost': float(detail['avg_cost']) if detail['transaction_type'].lower() == 'sell' else None,
                     'details': []
                 }
+                
+                # 如果是卖出交易，计算盈亏
+                if detail['transaction_type'].lower() == 'sell':
+                    # 卖出盈亏 = 卖出金额 - (卖出数量 * 卖出时移动加权平均价) - 卖出费用
+                    sell_amount = float(detail['total_amount'] or 0)
+                    sell_quantity = float(detail['total_quantity'] or 0)
+                    avg_cost = float(detail['avg_cost'] or 0)
+                    cost_amount = round(sell_quantity * avg_cost, 2)  # 四舍五入到2位小数
+                    total_fees = round(float(total_fees), 2)  # 四舍五入到2位小数
+                    profit = round(sell_amount - cost_amount - total_fees, 2)  # 四舍五入到2位小数
+                    transaction['profit'] = profit
                 
                 # 处理明细数据
                 if detail['detail_info']:

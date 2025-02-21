@@ -149,12 +149,12 @@
                                 <th>交易日期</th>
                                 <th>交易编号</th>
                                 <th>类型</th>
-                                <th class="text-end">数量</th>
-                                <th class="text-end">价格</th>
-                                <th class="text-end">金额</th>
+                                <th class="text-end">数量@单价</th>
+                                <th class="text-end">买入金额</th>
+                                <th class="text-end">移动加权平均价</th>
+                                <th class="text-end">卖出金额</th>
                                 <th class="text-end">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
+                                <th class="text-end">盈亏</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -163,16 +163,12 @@
                                   <td>{{ formatDate(detail.transaction_date) }}</td>
                                   <td>{{ detail.transaction_code }}</td>
                                   <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
-                                  <td class="text-end">
-                                    <template v-for="(d, index) in detail.details" :key="index">
-                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
-                                    </template>
-                                  </td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.sold_average_cost, 3) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
                                   <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}</td>
                                 </tr>
                               </template>
                               <tr v-else>
@@ -248,12 +244,12 @@
                                 <th>交易日期</th>
                                 <th>交易编号</th>
                                 <th>类型</th>
-                                <th class="text-end">数量</th>
-                                <th class="text-end">价格</th>
-                                <th class="text-end">金额</th>
+                                <th class="text-end">数量@单价</th>
+                                <th class="text-end">买入金额</th>
+                                <th class="text-end">移动加权平均价</th>
+                                <th class="text-end">卖出金额</th>
                                 <th class="text-end">费用</th>
-                                <th class="text-end">汇率</th>
-                                <th class="text-end">港币金额</th>
+                                <th class="text-end">盈亏</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -262,16 +258,12 @@
                                   <td>{{ formatDate(detail.transaction_date) }}</td>
                                   <td>{{ detail.transaction_code }}</td>
                                   <td>{{ detail.transaction_type === 'BUY' ? '买入' : '卖出' }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }}</td>
-                                  <td class="text-end">
-                                    <template v-for="(d, index) in detail.details" :key="index">
-                                      {{ formatNumber(d.price, 3) }}<br v-if="index < detail.details.length - 1">
-                                    </template>
-                                  </td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount) }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.total_quantity, 0) }} @ {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'BUY' ? formatNumber(detail.total_amount) : '' }}</td>
+                                  <td class="text-end">{{ formatNumber(detail.sold_average_cost, 3) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
                                   <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.exchange_rate, 4) }}</td>
-                                  <td class="text-end">{{ formatNumber(detail.total_amount_hkd) }}</td>
+                                  <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}</td>
                                 </tr>
                               </template>
                               <tr v-else>
