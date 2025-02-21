@@ -130,11 +130,11 @@
                       </td>
                       <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
                       <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
-                      <td class="text-end" :class="getProfitClass(stock.total_profit)">
-                        {{ formatNumber(stock.total_profit) }}
+                      <td class="text-end" :class="getProfitClass(stock.realized_profit + stock.market_value)">
+                        {{ formatNumber(stock.realized_profit + stock.market_value) }}
                       </td>
-                      <td class="text-end" :class="getProfitClass(stock.profit_rate)">
-                        {{ formatRate(stock.profit_rate) }}
+                      <td class="text-end" :class="getProfitClass(stock.total_buy > 0 ? ((stock.realized_profit + stock.market_value) / stock.total_buy * 100) : 0)">
+                        {{ formatRate(stock.total_buy > 0 ? ((stock.realized_profit + stock.market_value) / stock.total_buy * 100) : 0) }}
                       </td>
                     </tr>
                     <!-- 交易明细行 -->
@@ -150,7 +150,11 @@
                                 <th class="text-end cost">移动加权平均价</th>
                                 <th class="text-end amount">卖出金额</th>
                                 <th class="text-end fees">费用</th>
-                                <th class="text-end">盈亏</th>
+                                <th class="text-end profit">盈亏</th>
+                                <th class="text-end current-price">盈亏率</th>
+                                <th class="text-end holding-value"></th>
+                                <th class="text-end total-profit"></th>
+                                <th class="text-end profit-rate"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -187,10 +191,17 @@
                                   <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
                                   </td>
+                                  <td class="text-end" :class="getProfitClass(calculateProfitRate(detail))">
+                                    {{ detail.transaction_type === 'SELL' ? formatRate(calculateProfitRate(detail)) : '-' }}
+                                  </td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="7" class="text-center py-2">
+                                <td colspan="11" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
@@ -232,11 +243,11 @@
                       </td>
                       <td class="text-end">{{ formatNumber(stock.current_price, 3) }}</td>
                       <td class="text-end">{{ formatNumber(stock.market_value) }}</td>
-                      <td class="text-end" :class="getProfitClass(stock.total_profit)">
-                        {{ formatNumber(stock.total_profit) }}
+                      <td class="text-end" :class="getProfitClass(stock.realized_profit + stock.market_value)">
+                        {{ formatNumber(stock.realized_profit + stock.market_value) }}
                       </td>
-                      <td class="text-end" :class="getProfitClass(stock.profit_rate)">
-                        {{ formatRate(stock.profit_rate) }}
+                      <td class="text-end" :class="getProfitClass(stock.total_buy > 0 ? ((stock.realized_profit + stock.market_value) / stock.total_buy * 100) : 0)">
+                        {{ formatRate(stock.total_buy > 0 ? ((stock.realized_profit + stock.market_value) / stock.total_buy * 100) : 0) }}
                       </td>
                     </tr>
                     <!-- 交易明细行 -->
@@ -252,7 +263,11 @@
                                 <th class="text-end cost">移动加权平均价</th>
                                 <th class="text-end amount">卖出金额</th>
                                 <th class="text-end fees">费用</th>
-                                <th class="text-end">盈亏</th>
+                                <th class="text-end profit">盈亏</th>
+                                <th class="text-end current-price">盈亏率</th>
+                                <th class="text-end holding-value"></th>
+                                <th class="text-end total-profit"></th>
+                                <th class="text-end profit-rate"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -289,10 +304,17 @@
                                   <td class="text-end" :class="getProfitClass(calculateProfit(detail))">
                                     {{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}
                                   </td>
+                                  <td class="text-end" :class="getProfitClass(calculateProfitRate(detail))">
+                                    {{ detail.transaction_type === 'SELL' ? formatRate(calculateProfitRate(detail)) : '-' }}
+                                  </td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="7" class="text-center py-2">
+                                <td colspan="11" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
@@ -615,6 +637,14 @@ const calculateProfit = (detail) => {
   return Number((sellAmount - costAmount - fees).toFixed(2));  // 保留两位小数
 }
 
+// 在 script setup 部分添加计算盈亏率函数
+const calculateProfitRate = (detail) => {
+  if (detail.transaction_type !== 'SELL') return 0;
+  const profit = calculateProfit(detail);
+  const costAmount = detail.total_quantity * detail.sold_average_cost;
+  return costAmount > 0 ? (profit / costAmount * 100) : 0;
+}
+
 // 初始化
 onMounted(() => {
   search()
@@ -676,6 +706,123 @@ onMounted(() => {
   padding-left: 5rem !important; /* 第四层级 - 修改缩进*/
   background-color: #ffffff;
   padding: 0.5rem;
+  font-size: 0.75rem;  /* 12px */
+}
+
+.transaction-details .table {
+  background-color: white;
+  margin-bottom: 0;
+}
+
+.transaction-details th,
+.transaction-details td {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;  /* 12px */
+  white-space: nowrap;
+}
+
+.transaction-details th {
+  background-color: #f1f3f5;
+  font-weight: 500;
+  color: #495057;
+}
+
+.transaction-details td {
+  vertical-align: middle;
+}
+
+.transaction-details tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* 交易明细列宽 持仓股票*/
+.transaction-details .transaction-info {
+  min-width: 50px;
+  font-size: 0.75rem;  /* 12px */
+}
+
+.transaction-details .quantity-price {
+  min-width: 60px;
+  font-size: 0.75rem;  /* 12px */
+}
+
+.transaction-details .amount {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+.transaction-details .cost {
+  min-width: 80px;
+  font-size: 12px;
+}
+
+.transaction-details .fees {
+  min-width: 80px;
+  font-size: 12px;
+}
+
+.transaction-details .profit {
+  min-width: 80px;
+  font-size: 12px;
+}
+
+.transaction-details .current-price {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+.transaction-details .holding-value {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+.transaction-details .total-profit {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+.transaction-details .profit-rate {
+  min-width: 100px;
+  font-size: 12px;
+}
+
+
+
+
+
+
+
+
+
+
+
+/* 交易类型标签样式 */
+.transaction-type-badge {
+  display: inline-block;
+  width: 30px;
+  height: 16px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 0.75rem;  /* 12px */
+  font-weight: 450;
+  margin: 0 6px;
+}
+
+.transaction-type-badge.buy {
+  background-color: #e6071d;
+  color: #ffffff;
+}
+
+.transaction-type-badge.sell {
+  background-color: #549359;
+  color: #ffffff;
+}
+
+.transaction-code {
+  font-size: 0.675rem;  /* 14px */
+  color: #6c757d;
+  margin-left: 4px;
 }
 
 /* 按钮样式 */
@@ -867,11 +1014,11 @@ onMounted(() => {
 .transaction-type-badge {
   display: inline-block;
   width: 30px;
-  height: 15px;
+  height: 16px;
   line-height: 15px;
   text-align: center;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 0.75rem;  /* 12px */
   font-weight: 450;
   margin: 0 6px;
 }
@@ -888,7 +1035,7 @@ onMounted(() => {
 
 /* 交易编号样式 */
 .transaction-code {
-  font-size: 10px;
+  font-size: 0.675rem;  /* 14px */
   color: #6c757d;
   margin-left: 4px;
 }
@@ -896,13 +1043,12 @@ onMounted(() => {
 /* 交易信息列样式 */
 .transaction-info {
   min-width: 180px;
-  padding-left: 1rem !important;
-  font-size: 12px;
+  font-size: 0.75rem;  /* 12px */
 }
 
 /* 数量@单价列样式 */
 .quantity-price {
-  min-width: 140px;
+  min-width: 60px;
   padding-left: 1rem !important;
   text-align: left !important;
   font-size: 12px;
@@ -910,7 +1056,7 @@ onMounted(() => {
 
 /* 金额列样式 */
 .amount {
-  min-width: 80px;
+  min-width: 100px;
   font-size: 12px;
 }
 
@@ -918,7 +1064,6 @@ onMounted(() => {
 .cost {
   min-width: 80px;
   font-size: 12px;
-  color: #6c757d;
 }
 
 /* 费用列样式 */
@@ -926,4 +1071,29 @@ onMounted(() => {
   min-width: 80px;
   font-size: 12px;
 }
+
+.profit {
+  min-width: 80px;
+  font-size: 12px;
+} 
+
+.current-price {
+  min-width: 100px;
+  font-size: 12px;
+} 
+
+.holding-value {
+  min-width: 100px;
+  font-size: 12px;
+} 
+
+.total-profit {
+  min-width: 100px;
+  font-size: 12px;
+}  
+
+.profit-rate {
+  min-width: 100px;
+  font-size: 12px;
+}  
 </style> 

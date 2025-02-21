@@ -155,6 +155,10 @@
                                 <th class="text-end">卖出金额</th>
                                 <th class="text-end">费用</th>
                                 <th class="text-end">盈亏</th>
+                                <th class="text-end">现价</th>
+                                <th class="text-end">持仓价值</th>
+                                <th class="text-end">总盈亏</th>
+                                <th class="text-end">盈亏率</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -169,10 +173,14 @@
                                   <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
                                   <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
                                   <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="9" class="text-center py-2">
+                                <td colspan="13" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
@@ -250,6 +258,10 @@
                                 <th class="text-end">卖出金额</th>
                                 <th class="text-end">费用</th>
                                 <th class="text-end">盈亏</th>
+                                <th class="text-end">现价</th>
+                                <th class="text-end">持仓价值</th>
+                                <th class="text-end">总盈亏</th>
+                                <th class="text-end">盈亏率</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -264,10 +276,14 @@
                                   <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(detail.total_amount) : '' }}</td>
                                   <td class="text-end">{{ formatNumber(detail.total_fees_hkd) }}</td>
                                   <td class="text-end">{{ detail.transaction_type === 'SELL' ? formatNumber(calculateProfit(detail)) : '-' }}</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
+                                  <td class="text-end">-</td>
                                 </tr>
                               </template>
                               <tr v-else>
-                                <td colspan="9" class="text-center py-2">
+                                <td colspan="13" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
                                 </td>
                               </tr>
