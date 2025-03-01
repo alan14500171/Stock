@@ -2,7 +2,7 @@
 用户模型
 """
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+import bcrypt
 from config.database import db
 import logging
 
@@ -19,11 +19,29 @@ class User:
         
     def set_password(self, password):
         """设置密码"""
-        self.password_hash = generate_password_hash(password)
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password, salt)
+        self.password_hash = hashed.decode('utf-8')
         
     def check_password(self, password):
         """验证密码"""
-        return check_password_hash(self.password_hash, password)
+        try:
+            if not self.password_hash:
+                return False
+                
+            if isinstance(password, str):
+                password = password.encode('utf-8')
+                
+            stored_hash = self.password_hash
+            if isinstance(stored_hash, str):
+                stored_hash = stored_hash.encode('utf-8')
+                
+            return bcrypt.checkpw(password, stored_hash)
+        except Exception as e:
+            logger.error(f"密码验证失败: {str(e)}")
+            return False
         
     def save(self):
         """保存用户"""

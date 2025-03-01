@@ -87,7 +87,7 @@ def create_app():
 
     # 初始化数据库连接
     try:
-        db.init_pool(get_db_config('development'))
+        db.init_pool('development')
         app.logger.info("数据库连接池初始化成功")
     except Exception as e:
         app.logger.error(f"数据库连接池初始化失败: {str(e)}")

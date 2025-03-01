@@ -433,8 +433,8 @@ def recalculate_transaction_splits(holder_id=None, stock_code=None, market=None,
                     else:
                         current_cost = 0
                     
-                    # 保持平均成本不变
-                    current_avg_cost = prev_avg_cost
+                    # 更新平均成本
+                    current_avg_cost = current_cost / current_quantity if current_quantity > 0 else 0
                     
                     # 更新累计状态
                     running_quantity = current_quantity
@@ -490,4 +490,22 @@ def recalculate_transaction_splits(holder_id=None, stock_code=None, market=None,
     duration = (end_time - start_time).total_seconds()
     logger.info(f"处理完成: 总计 {total_count} 条, 成功 {success_count} 条, 失败 {fail_count} 条, 耗时 {duration:.2f} 秒")
     
-    return (total_count, success_count, fail_count) 
+    return (total_count, success_count, fail_count)
+
+if __name__ == '__main__':
+    # 确保日志目录存在
+    ensure_log_directory()
+    
+    print("开始重新计算所有交易记录...")
+    
+    try:
+        # 重新计算所有交易分单记录
+        total, success, fail = recalculate_transaction_splits(update_original=True)
+        
+        print(f"\n重新计算完成:")
+        print(f"总计处理记录: {total}")
+        print(f"成功处理: {success}")
+        print(f"失败处理: {fail}")
+        
+    except Exception as e:
+        print(f"重新计算过程中发生错误: {str(e)}") 

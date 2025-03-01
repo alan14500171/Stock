@@ -8,6 +8,8 @@ import pymysql
 import json
 from utils.db import get_db_connection
 from utils.auth import login_required, has_permission
+from services.transaction_calculator import TransactionCalculator
+from decimal import Decimal
 
 transaction_split_bp = Blueprint('transaction_split', __name__)
 
@@ -289,95 +291,95 @@ def split_transaction():
             else:  # sell
                 split_net_amount = split_amount - split_total_fees
             
+            # 获取持有人最新持仓状态
+            holding_query = """
+            SELECT ts.*
+            FROM transaction_splits ts
+            INNER JOIN (
+                SELECT holder_id, stock_code, market, MAX(transaction_date) as max_date, MAX(id) as max_id
+                FROM transaction_splits
+                WHERE holder_id = %s 
+                    AND stock_code = %s 
+                    AND market = %s
+                    AND transaction_date <= %s
+                GROUP BY holder_id, stock_code, market
+            ) latest ON ts.holder_id = latest.holder_id 
+                AND ts.stock_code = latest.stock_code 
+                AND ts.market = latest.market
+                AND ts.transaction_date = latest.max_date
+                AND ts.id = latest.max_id
+            """
+            
+            cursor.execute(holding_query, (
+                holder_id, 
+                original_transaction['stock_code'], 
+                original_transaction['market'],
+                original_transaction['transaction_date']
+            ))
+            latest_holding = cursor.fetchone()
+            
+            # 初始化持仓状态
+            prev_quantity = Decimal('0')
+            prev_cost = Decimal('0')
+            prev_avg_cost = Decimal('0')
+            
+            # 如果有最新持仓记录，使用其状态
+            if latest_holding:
+                prev_quantity = Decimal(str(latest_holding['current_quantity']))
+                prev_cost = Decimal(str(latest_holding['current_cost']))
+                prev_avg_cost = Decimal(str(latest_holding['current_avg_cost']))
+                
+                current_app.logger.info(f"获取到最新持仓记录: 交易日期={latest_holding['transaction_date']}")
+            else:
+                current_app.logger.info("未找到历史持仓记录，使用初始值")
+            
+            # 构建交易数据
+            transaction_data = {
+                'transaction_type': original_transaction['transaction_type'],
+                'total_quantity': split_quantity,
+                'total_amount': split_amount,
+                'broker_fee': split_broker_fee,
+                'stamp_duty': split_stamp_duty,
+                'transaction_levy': split_transaction_levy,
+                'trading_fee': split_trading_fee,
+                'deposit_fee': split_deposit_fee
+            }
+            
+            # 构建前值状态
+            prev_state = {
+                'quantity': prev_quantity,
+                'cost': prev_cost,
+                'avg_cost': prev_avg_cost
+            }
+            
+            # 使用TransactionCalculator计算持仓变化
+            try:
+                position_change = TransactionCalculator.calculate_position_change(transaction_data, prev_state)
+                
+                # 更新计算结果
+                current_quantity = position_change['current_quantity']
+                current_cost = position_change['current_cost']
+                current_avg_cost = position_change['current_avg_cost']
+                realized_profit = position_change['realized_profit']
+                profit_rate = position_change['profit_rate']
+                running_quantity = current_quantity
+                running_cost = current_cost
+                
+            except Exception as e:
+                current_app.logger.error(f"计算持仓变化失败: {str(e)}")
+                raise
+            
+            # 记录计算过程
+            current_app.logger.info(f"持仓计算过程:")
+            current_app.logger.info(f"1. 计算前持仓: 数量={prev_quantity}, 成本={prev_cost}, 均价={prev_avg_cost}")
+            current_app.logger.info(f"2. 本次交易: 类型={transaction_data['transaction_type']}, 数量={split_quantity}, 金额={split_amount}")
+            current_app.logger.info(f"3. 计算后持仓: 数量={current_quantity}, 成本={current_cost}, 均价={current_avg_cost}")
+            current_app.logger.info(f"4. 盈亏信息: 已实现盈亏={realized_profit}, 盈亏率={profit_rate}%")
+            
             # 记录即将插入的分单记录数据
             current_app.logger.info(f"准备插入分单记录: 持有人={holder_name}, 股票={original_transaction.get('stock_code')}, 市场={original_transaction.get('market')}")
             current_app.logger.info(f"分单数据: 数量={split_quantity}, 金额={split_amount}, 平均价格={split_avg_price}, 净额={split_net_amount}")
-            
-            # 获取持有人当前持仓信息
-            holding_query = """
-            SELECT 
-                SUM(CASE WHEN transaction_type = 'buy' THEN total_quantity ELSE -total_quantity END) as current_quantity,
-                SUM(CASE WHEN transaction_type = 'buy' THEN total_amount ELSE -total_amount END) as current_cost
-            FROM transaction_splits
-            WHERE holder_id = %s AND stock_code = %s AND market = %s
-            GROUP BY holder_id, stock_code, market
-            """
-            
-            cursor.execute(holding_query, (holder_id, original_transaction['stock_code'], original_transaction['market']))
-            holding_data = cursor.fetchone()
-            
-            # 初始化持仓相关变量
-            prev_quantity = 0
-            prev_cost = 0
-            prev_avg_cost = 0
-            current_quantity = 0
-            current_cost = 0
-            current_avg_cost = 0
-            running_quantity = 0
-            running_cost = 0
-            realized_profit = 0
-            profit_rate = 0
-            
-            # 如果有持仓数据，计算相关字段
-            if holding_data:
-                prev_quantity = float(holding_data.get('current_quantity', 0) or 0)
-                prev_cost = float(holding_data.get('current_cost', 0) or 0)
-                
-                # 计算平均成本
-                if prev_quantity > 0:
-                    prev_avg_cost = prev_cost / prev_quantity
-                
-                # 根据交易类型计算交易后持仓
-                if original_transaction['transaction_type'].lower() == 'buy':
-                    current_quantity = prev_quantity + split_quantity
-                    current_cost = prev_cost + split_amount
-                    
-                    # 计算新的平均成本
-                    if current_quantity > 0:
-                        current_avg_cost = current_cost / current_quantity
-                    
-                    running_quantity = current_quantity
-                    running_cost = current_cost
-                else:  # sell
-                    current_quantity = prev_quantity - split_quantity
-                    
-                    # 计算已实现盈亏
-                    if prev_quantity > 0 and prev_avg_cost > 0:
-                        realized_profit = split_amount - (split_quantity * prev_avg_cost)
-                        profit_rate = (realized_profit / (split_quantity * prev_avg_cost)) * 100
-                    
-                    # 计算剩余成本
-                    if prev_quantity > 0:
-                        current_cost = prev_cost * (current_quantity / prev_quantity)
-                    else:
-                        current_cost = 0
-                    
-                    # 保持平均成本不变
-                    current_avg_cost = prev_avg_cost
-                    
-                    running_quantity = current_quantity
-                    running_cost = current_cost
-            else:
-                # 如果没有持仓数据，根据交易类型初始化
-                if original_transaction['transaction_type'].lower() == 'buy':
-                    current_quantity = split_quantity
-                    current_cost = split_amount
-                    
-                    if current_quantity > 0:
-                        current_avg_cost = current_cost / current_quantity
-                    
-                    running_quantity = current_quantity
-                    running_cost = current_cost
-                else:  # sell
-                    # 卖出但没有持仓，这是一种异常情况
-                    current_app.logger.warning(f"异常情况: 持有人{holder_name}卖出股票{original_transaction['stock_code']}但没有持仓记录")
-                    
-                    # 仍然记录为负持仓
-                    current_quantity = -split_quantity
-                    current_cost = -split_amount
-                    current_avg_cost = 0
-                    running_quantity = current_quantity
-                    running_cost = current_cost
+            current_app.logger.info(f"持仓变化: 前值={prev_quantity}/{prev_cost}/{prev_avg_cost}, 现值={current_quantity}/{current_cost}/{current_avg_cost}")
             
             # 插入分单记录
             cursor.execute(insert_query, (
