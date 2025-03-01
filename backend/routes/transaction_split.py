@@ -19,8 +19,17 @@ logger = logging.getLogger(__name__)
 def get_transaction_by_code():
     """
     根据交易编号获取交易记录
+    允许以下用户查看：
+    1. 交易创建者
+    2. 分单的持有人关联的用户
     """
     transaction_code = request.args.get('transaction_code', '')
+    current_user_id = session.get('user_id')
+    
+    # 添加详细日志
+    logger.info(f"请求交易记录，交易编号: {transaction_code}")
+    logger.info(f"当前session: {dict(session)}")
+    logger.info(f"当前用户ID: {current_user_id}")
     
     if not transaction_code:
         return jsonify({
@@ -31,6 +40,63 @@ def get_transaction_by_code():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # 检查权限：是否是交易创建者或分单持有人
+        auth_check_query = """
+        SELECT DISTINCT st.id, st.transaction_code
+        FROM stock_transactions st
+        LEFT JOIN transaction_splits ts ON st.id = ts.original_transaction_id
+        LEFT JOIN holders h ON ts.holder_id = h.id
+        WHERE st.transaction_code = %s 
+        AND (
+            st.user_id = %s 
+            OR h.user_id = %s 
+            OR EXISTS (
+                SELECT 1 
+                FROM holders h2 
+                WHERE h2.user_id = %s 
+                AND h2.id IN (
+                    SELECT holder_id 
+                    FROM transaction_splits 
+                    WHERE original_transaction_id = st.id
+                )
+            )
+        )
+        """
+        
+        # 记录查询参数
+        logger.info(f"执行权限检查查询，参数: user_id={current_user_id}, transaction_code={transaction_code}")
+        
+        cursor.execute(auth_check_query, (transaction_code, current_user_id, current_user_id, current_user_id))
+        auth_result = cursor.fetchone()
+        
+        # 记录权限检查结果
+        logger.info(f"权限检查结果: {auth_result}")
+        
+        if not auth_result:
+            # 记录更多信息以便调试
+            debug_query = """
+            SELECT 
+                st.id as transaction_id,
+                st.transaction_code,
+                st.user_id as transaction_user_id,
+                ts.id as split_id,
+                h.id as holder_id,
+                h.name as holder_name,
+                h.user_id as holder_user_id
+            FROM stock_transactions st
+            LEFT JOIN transaction_splits ts ON st.id = ts.original_transaction_id
+            LEFT JOIN holders h ON ts.holder_id = h.id
+            WHERE st.transaction_code = %s
+            """
+            cursor.execute(debug_query, (transaction_code,))
+            debug_info = cursor.fetchall()
+            logger.info(f"调试信息 - 交易记录详情: {debug_info}")
+            
+            return jsonify({
+                'success': False,
+                'message': '无权查看该交易记录'
+            }), 403
         
         # 查询交易记录
         query = """
@@ -57,6 +123,16 @@ def get_transaction_by_code():
         cursor.execute(detail_query, (transaction['id'],))
         details = cursor.fetchall()
         
+        # 获取分单记录
+        splits_query = """
+        SELECT ts.*, h.name as holder_name, h.user_id as holder_user_id
+        FROM transaction_splits ts
+        LEFT JOIN holders h ON ts.holder_id = h.id
+        WHERE ts.original_transaction_id = %s
+        """
+        cursor.execute(splits_query, (transaction['id'],))
+        splits = cursor.fetchall()
+        
         # 转换日期格式
         if transaction.get('transaction_date'):
             transaction['transaction_date'] = transaction['transaction_date'].strftime('%Y-%m-%d')
@@ -67,8 +143,9 @@ def get_transaction_by_code():
         if transaction.get('updated_at'):
             transaction['updated_at'] = transaction['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
         
-        # 添加明细到交易记录
+        # 添加明细和分单信息到交易记录
         transaction['details'] = details
+        transaction['splits'] = splits
         
         return jsonify({
             'success': True,

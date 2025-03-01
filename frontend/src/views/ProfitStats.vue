@@ -256,16 +256,17 @@
                                     {{ formatDate(detail.transaction_date) }}
                                     <span :class="['transaction-type-badge', detail.transaction_type.toLowerCase() === 'buy' ? 'buy' : 'sell']">
                                       {{ detail.transaction_type.toLowerCase() === 'buy' ? '买入' : '卖出' }}
-                        </span>
+                                    </span>
                                     <span class="transaction-code">{{ detail.transaction_code.trim() }}</span>
-                    </td>
+                                    <span v-if="detail.holder_name" class="holder-name">({{ detail.holder_name }})</span>
+                                  </td>
                                   <td class="quantity-price">
                                     {{ formatNumber(detail.total_quantity, 0) }} @ 
                                     {{ formatNumber(detail.total_amount / detail.total_quantity, 3) }}
-                    </td>
+                                  </td>
                                   <td class="text-end amount">
                                     {{ detail.transaction_type.toLowerCase() === 'buy' ? formatNumber(detail.total_amount) : '' }}
-                    </td>
+                                  </td>
                                   <td class="text-end cost">
                                     <template v-if="detail.transaction_type.toLowerCase() === 'buy'">
                                       {{ formatNumber(detail.current_avg_cost, 3) }}
@@ -273,7 +274,7 @@
                                     <template v-else>
                                       {{ formatNumber(detail.prev_avg_cost, 3) }}
                                     </template>
-                    </td>
+                                  </td>
                                   <td class="text-end amount">
                                     {{ detail.transaction_type.toLowerCase() === 'sell' ? formatNumber(detail.total_amount) : '' }}
                                   </td>
@@ -289,19 +290,18 @@
                                   <td class="text-end">{{ detail.holder_name || '-' }}</td>
                                   <td class="text-end">-</td>
                                   <td class="text-end">-</td>
-
-                  </tr>
+                                </tr>
                               </template>
                               <tr v-else>
                                 <td colspan="11" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-                    </td>
-                  </tr>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
                   </template>
                 </template>
 
@@ -376,6 +376,7 @@
                                       {{ detail.transaction_type.toLowerCase() === 'buy' ? '买入' : '卖出' }}
                                     </span>
                                     <span class="transaction-code">{{ detail.transaction_code.trim() }}</span>
+                                    <span v-if="detail.holder_name" class="holder-name">({{ detail.holder_name }})</span>
                                   </td>
                                   <td class="quantity-price">
                                     {{ formatNumber(detail.total_quantity, 0) }} @ 
@@ -387,10 +388,10 @@
                                   <td class="text-end cost">
                                     <template v-if="detail.transaction_type.toLowerCase() === 'buy'">
                                       {{ formatNumber(detail.current_avg_cost, 3) }}
-                    </template>
-                    <template v-else>
+                                    </template>
+                                    <template v-else>
                                       {{ formatNumber(detail.prev_avg_cost, 3) }}
-                    </template>
+                                    </template>
                                   </td>
                                   <td class="text-end amount">
                                     {{ detail.transaction_type.toLowerCase() === 'sell' ? formatNumber(detail.total_amount) : '' }}
@@ -407,19 +408,18 @@
                                   <td class="text-end">{{ detail.holder_name || '-' }}</td>
                                   <td class="text-end">-</td>
                                   <td class="text-end">-</td>
-
                                 </tr>
                               </template>
                               <tr v-else>
                                 <td colspan="11" class="text-center py-2">
                                   <small class="text-muted">暂无交易明细数据</small>
-                    </td>
+                                </td>
                               </tr>
                             </tbody>
                           </table>
-            </div>
-                    </td>
-                  </tr>
+                        </div>
+                      </td>
+                    </tr>
                   </template>
                 </template>
               </template>

@@ -27,15 +27,24 @@ def create_app():
 
     # 配置
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'dev_key'
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_SAMESITE'] = None  # 开发环境下允许跨站点请求
+    app.config['SESSION_COOKIE_SECURE'] = False   # 开发环境使用HTTP
     app.config['PERMANENT_SESSION_LIFETIME'] = 3600
     app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_DOMAIN'] = None    # 允许所有域
     app.config['JSON_AS_ASCII'] = False  # 支持中文
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 最大请求大小16MB
 
     # 添加CORS支持
-    CORS(app)
+    CORS(app, supports_credentials=True, resources={
+        r"/*": {
+            "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+            "expose_headers": ["Content-Type"],
+            "supports_credentials": True
+        }
+    })
 
     @app.after_request
     def after_request(response):

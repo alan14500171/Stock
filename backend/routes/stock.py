@@ -896,23 +896,38 @@ def get_profit_stats():
 
         # 3. 获取交易数据
         sql = f"""
-            WITH transaction_summary AS (
-                SELECT 
-                    t.market,
-                    t.stock_code,
-                    s.code_name as stock_name,
-                    t.transaction_type,
-                    SUM(t.total_quantity) as total_quantity,
-                    SUM(t.total_amount) as total_amount,
-                    SUM(t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee) as total_fees,
-                    COUNT(*) as transaction_count
-                FROM stock.stock_transactions t
-                LEFT JOIN stock.stocks s ON t.stock_code = s.code AND t.market = s.market
-                WHERE {where_clause}
-                GROUP BY t.market, t.stock_code, s.code_name, t.transaction_type
+            WITH user_transactions AS (
+                -- 用户直接创建的交易
+                SELECT st.*, NULL as holder_id, NULL as holder_name, 
+                       NULL as split_ratio, st.total_quantity as split_quantity,
+                       st.total_amount as split_amount, st.total_fees as split_fees,
+                       st.current_quantity as split_current_quantity,
+                       st.current_cost as split_current_cost,
+                       st.current_avg_cost as split_current_avg_cost,
+                       st.realized_profit as split_realized_profit,
+                       st.profit_rate as split_profit_rate
+                FROM stock_transactions st
+                WHERE st.user_id = %s
+                
+                UNION ALL
+                
+                -- 用户通过持有人关联的分单交易
+                SELECT st.*, ts.holder_id, h.name as holder_name,
+                       ts.split_ratio, ts.total_quantity as split_quantity,
+                       ts.total_amount as split_amount, ts.total_fees as split_fees,
+                       ts.current_quantity as split_current_quantity,
+                       ts.current_cost as split_current_cost,
+                       ts.current_avg_cost as split_current_avg_cost,
+                       ts.realized_profit as split_realized_profit,
+                       ts.profit_rate as split_profit_rate
+                FROM stock_transactions st
+                JOIN transaction_splits ts ON st.id = ts.original_transaction_id
+                JOIN holders h ON ts.holder_id = h.id
+                WHERE h.user_id = %s
             )
-            SELECT * FROM transaction_summary
-            ORDER BY market, stock_code, transaction_type
+            SELECT ut.*, s.code_name as stock_name
+            FROM user_transactions ut
+            LEFT JOIN stocks s ON ut.stock_code = s.code AND ut.market = s.market
         """
 
         transactions = db.fetch_all(sql, params)

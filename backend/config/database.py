@@ -269,3 +269,71 @@ def init_db(app):
 def get_db_session(app):
     """获取数据库会话"""
     return db.session 
+
+def test_user_access():
+    """测试用户访问权限"""
+    try:
+        db = Database()
+        db.init_pool()
+        
+        # 1. 检查用户信息
+        user_sql = """
+            SELECT id, username, display_name, is_active 
+            FROM stock.users 
+            WHERE username = 'lili'
+        """
+        user = db.fetch_one(user_sql)
+        print("\n用户信息:")
+        print(user)
+        
+        if user:
+            user_id = user['id']
+            
+            # 2. 检查持有人信息
+            holders_sql = """
+                SELECT id, name, user_id, status 
+                FROM stock.holders 
+                WHERE user_id = %s OR name = 'lili'
+            """
+            holders = db.fetch_all(holders_sql, [user_id])
+            print("\n持有人信息:")
+            print(holders)
+            
+            # 3. 检查分单记录
+            splits_sql = """
+                SELECT ts.*, h.name as holder_name, h.user_id as holder_user_id,
+                       st.transaction_code, st.user_id as transaction_user_id
+                FROM stock.transaction_splits ts
+                JOIN stock.holders h ON ts.holder_id = h.id
+                JOIN stock.stock_transactions st ON ts.original_transaction_id = st.id
+                WHERE h.user_id = %s
+            """
+            splits = db.fetch_all(splits_sql, [user_id])
+            print("\n分单记录:")
+            print(splits)
+            
+            # 4. 检查特定交易记录的访问权限
+            transaction_code = 'P-892469'  # 这是你提到的交易编号
+            auth_check_sql = """
+                SELECT DISTINCT st.id, st.transaction_code, st.user_id
+                FROM stock.stock_transactions st
+                LEFT JOIN stock.transaction_splits ts ON st.id = ts.original_transaction_id
+                LEFT JOIN stock.holders h ON ts.holder_id = h.id
+                WHERE st.transaction_code = %s 
+                AND (st.user_id = %s OR h.user_id = %s)
+            """
+            auth_result = db.fetch_one(auth_check_sql, [transaction_code, user_id, user_id])
+            print("\n交易记录访问权限检查:")
+            print(auth_result)
+            
+        else:
+            print("未找到用户 lili")
+            
+    except Exception as e:
+        print(f"测试过程中发生错误: {str(e)}")
+    finally:
+        if db:
+            db.close()
+
+if __name__ == '__main__':
+    test_user_access() 
