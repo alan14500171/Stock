@@ -52,12 +52,13 @@ const routes = [
     }
   },
   {
-    path: '/stock',
-    name: 'StockManager',
-    component: StockManager,
-    meta: {
-      title: '股票管理',
-      requiresAuth: true
+    path: '/profit/stats',
+    name: 'ProfitStats',
+    component: ProfitStats,
+    meta: { 
+      title: '收益统计',
+      requiresAuth: true,
+      permission: 'profit:stats:view'
     }
   },
   {
@@ -71,7 +72,6 @@ const routes = [
   },
   {
     path: '/transaction/add',
-    name: 'TransactionAdd',
     component: () => import('../views/TransactionAdd.vue'),
     meta: { 
       title: '添加交易',
@@ -80,7 +80,6 @@ const routes = [
   },
   {
     path: '/transactions/edit/:id',
-    name: 'TransactionEdit',
     component: () => import('../views/TransactionEdit.vue'),
     meta: { 
       title: '编辑交易',
@@ -88,25 +87,24 @@ const routes = [
     }
   },
   {
-    path: '/profit/stats',
-    name: 'ProfitStats',
-    component: ProfitStats,
+    path: '/exchange/rate',
+    component: ExchangeRateManager,
     meta: { 
-      title: '收益统计',
-      requiresAuth: true,
-      permission: 'profit:stats:view'
+      title: '汇率管理',
+      requiresAuth: true 
     }
   },
   {
-    path: '/exchange/rate',
-    name: 'ExchangeRate',
-    component: ExchangeRateManager,
-    meta: { requiresAuth: true }
+    path: '/stock',
+    component: StockManager,
+    meta: {
+      title: '股票管理',
+      requiresAuth: true
+    }
   },
   // 系统管理路由
   {
     path: '/system/user',
-    name: 'SystemUser',
     component: User,
     meta: { 
       requiresAuth: true,
@@ -115,7 +113,6 @@ const routes = [
   },
   {
     path: '/system/role',
-    name: 'SystemRole',
     component: Role,
     meta: { 
       requiresAuth: true,
@@ -124,7 +121,6 @@ const routes = [
   },
   {
     path: '/system/permission',
-    name: 'SystemPermission',
     component: Permission,
     meta: { 
       requiresAuth: true,
@@ -133,7 +129,6 @@ const routes = [
   },
   {
     path: '/system/holder',
-    name: 'SystemHolder',
     component: () => import('../views/system/Holder.vue'),
     meta: { 
       requiresAuth: true,

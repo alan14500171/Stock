@@ -15,8 +15,8 @@
               </router-link>
             </li>
             <li class="nav-item">
-              <router-link to="/stock" class="nav-link">
-                <i class="bi bi-graph-up"></i> 股票管理
+              <router-link to="/profit/stats" class="nav-link">
+                <i class="bi bi-bar-chart"></i> 收益统计
               </router-link>
             </li>
             <li class="nav-item">
@@ -25,13 +25,13 @@
               </router-link>
             </li>
             <li class="nav-item">
-              <router-link to="/profit/stats" class="nav-link">
-                <i class="bi bi-bar-chart"></i> 收益统计
+              <router-link to="/exchange/rate" class="nav-link">
+                <i class="bi bi-currency-exchange"></i> 汇率管理
               </router-link>
             </li>
             <li class="nav-item">
-              <router-link to="/exchange/rate" class="nav-link">
-                <i class="bi bi-currency-exchange"></i> 汇率管理
+              <router-link to="/stock" class="nav-link">
+                <i class="bi bi-graph-up"></i> 股票管理
               </router-link>
             </li>
             
