@@ -2,10 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from .transaction_calculator import TransactionCalculator
 import pymysql.cursors
+import logging
 from utils.transaction_recalculator import recalculate_transaction_splits
 
+logger = logging.getLogger(__name__)
+
 class TransactionService:
-    """交易服务类，处理交易记录的增加、编辑和删除操作"""
+    """交易服务类,处理交易记录的增加、编辑和删除操作"""
     
     @staticmethod
     def process_transaction(db, user_id, transaction_data, transaction_id=None, is_delete=False):
@@ -23,88 +26,37 @@ class TransactionService:
             tuple: (success, result, status_code)
         """
         try:
-            # 验证交易数据（仅添加和编辑时需要）
-            if not is_delete:
-                errors = TransactionCalculator.validate_transaction(transaction_data)
-                if errors:
-                    return False, {'message': '数据验证失败', 'errors': errors}, 400
-            
-            # 获取交易前的持仓状态
-            prev_state = TransactionCalculator.get_previous_state(
-                db, user_id, 
-                transaction_data.get('stock_code') if not is_delete else transaction_data['stock_code'],
-                transaction_data.get('market') if not is_delete else transaction_data['market'],
-                transaction_data.get('transaction_date') if not is_delete else transaction_data['transaction_date'],
-                transaction_id
-            )
-            
-            # 计算交易变化（仅添加和编辑时需要）
-            changes = None
-            if not is_delete:
-                try:
-                    changes = TransactionCalculator.calculate_position_change(transaction_data, prev_state)
-                except ValueError as e:
-                    return False, {'message': str(e)}, 400
-            
             # 开始事务
             db.execute("START TRANSACTION")
             
             try:
-                result = None
+                # 使用统一计算模块处理交易
+                success, result = TransactionCalculator.process_transaction(
+                    db_conn=db,
+                    transaction_data=transaction_data,
+                    operation_type='delete' if is_delete else 'edit' if transaction_id else 'add',
+                    holder_id=user_id,
+                    original_transaction_id=transaction_id
+                )
                 
-                # 根据操作类型执行不同的数据库操作
-                if is_delete:
-                    # 删除操作
-                    success, result = TransactionService._handle_delete(
-                        db, user_id, transaction_id, transaction_data, prev_state
-                    )
-                    if not success:
-                        db.execute("ROLLBACK")
-                        return False, result, 500
-                
-                elif transaction_id:  # 编辑操作
-                    success, result = TransactionService._handle_update(
-                        db, user_id, transaction_id, transaction_data, changes
-                    )
-                    if not success:
-                        db.execute("ROLLBACK")
-                        return False, result, 500
-                    
-                else:  # 添加操作
-                    success, result = TransactionService._handle_insert(
-                        db, user_id, transaction_data, changes
-                    )
-                    if not success:
-                        db.execute("ROLLBACK")
-                        return False, result, 500
+                if not success:
+                    db.execute("ROLLBACK")
+                    return False, result, 400
                 
                 # 提交事务
                 db.execute("COMMIT")
                 
-                # 重新计算交易分单记录字段
+                # 重新计算后续交易记录
                 try:
-                    # 获取需要更新的参数
-                    if is_delete:
-                        # 删除操作，更新该股票在删除日期及之后的记录
-                        recalculate_transaction_splits(
-                            stock_code=transaction_data['stock_code'],
-                            market=transaction_data['market'],
-                            start_date=transaction_data['transaction_date'],
-                            update_original=True
-                        )
-                    else:
-                        # 添加或编辑操作，更新该股票在交易日期及之后的记录
-                        recalculate_transaction_splits(
-                            stock_code=transaction_data['stock_code'],
-                            market=transaction_data['market'],
-                            start_date=transaction_data['transaction_date'],
-                            update_original=True
-                        )
+                    TransactionCalculator.recalculate_subsequent_transactions(
+                        db_conn=db,
+                        stock_code=transaction_data['stock_code'],
+                        market=transaction_data['market'],
+                        start_date=transaction_data['transaction_date'],
+                        holder_id=user_id
+                    )
                 except Exception as e:
-                    # 记录错误但不影响主流程
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"重新计算交易分单记录字段失败: {str(e)}")
+                    logger.error(f"重新计算后续交易记录失败: {str(e)}")
                 
                 return True, result, 200
                 
@@ -113,6 +65,7 @@ class TransactionService:
                 raise e
                 
         except Exception as e:
+            logger.error(f"处理交易记录失败: {str(e)}")
             return False, {'message': f'处理交易记录失败: {str(e)}'}, 500
     
     @staticmethod

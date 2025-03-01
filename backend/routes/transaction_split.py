@@ -12,6 +12,7 @@ from services.transaction_calculator import TransactionCalculator
 from decimal import Decimal
 
 transaction_split_bp = Blueprint('transaction_split', __name__)
+logger = logging.getLogger(__name__)
 
 @transaction_split_bp.route('/api/transaction/get_by_code', methods=['GET'])
 @login_required
@@ -127,381 +128,176 @@ def get_users():
 @transaction_split_bp.route('/api/transaction/split', methods=['POST'])
 @login_required
 def split_transaction():
-    """
-    分割交易记录
-    """
-    # 检查权限
-    user_id = session.get('user_id')
-    if not has_permission(user_id, 'transaction:split:add'):
-        return jsonify({
-            'success': False,
-            'message': '权限不足'
-        }), 403
-        
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({
-            'success': False,
-            'message': '请提供数据'
-        }), 400
-    
-    original_transaction_id = data.get('original_transaction_id')
-    split_data = data.get('split_data', [])
-    
-    if not original_transaction_id:
-        return jsonify({
-            'success': False,
-            'message': '请提供原始交易ID'
-        }), 400
-    
-    if not split_data or not isinstance(split_data, list) or len(split_data) == 0:
-        return jsonify({
-            'success': False,
-            'message': '请提供分单数据'
-        }), 400
-    
-    # 验证总分配比例是否为100%
-    total_ratio = sum(item.get('split_ratio', 0) for item in split_data)
-    if abs(total_ratio - 1.0) > 0.0001:  # 允许0.01%的误差
-        return jsonify({
-            'success': False,
-            'message': f'总分配比例必须为100%，当前为{total_ratio*100:.2f}%'
-        }), 400
-    
-    conn = None
-    cursor = None
-    
+    """处理交易分单"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': '无效的请求数据'
+            }), 400
+
         # 获取原始交易记录
-        query = """
-        SELECT t.*, s.code_name as stock_name 
-        FROM stock_transactions t
-        LEFT JOIN stocks s ON t.stock_code = s.code AND t.market = s.market
-        WHERE t.id = %s
+        db = get_db_connection()
+        original_transaction_sql = """
+            SELECT * FROM stock_transactions 
+            WHERE id = %s AND user_id = %s
         """
-        cursor.execute(query, (original_transaction_id,))
-        original_transaction = cursor.fetchone()
+        original_transaction = db.fetch_one(
+            original_transaction_sql, 
+            [data['transaction_id'], session['user_id']]
+        )
         
         if not original_transaction:
             return jsonify({
                 'success': False,
-                'message': '未找到原始交易记录'
+                'message': '找不到原始交易记录'
             }), 404
-            
-        # 记录原始交易记录的内容
-        current_app.logger.info(f"获取到原始交易记录: ID={original_transaction_id}, 交易编号={original_transaction.get('transaction_code')}")
-        current_app.logger.info(f"原始交易记录字段: {', '.join(original_transaction.keys())}")
+
+        # 验证分单比例总和
+        total_ratio = sum(Decimal(str(split['ratio'])) for split in data['splits'])
+        if total_ratio != Decimal('1'):
+            return jsonify({
+                'success': False,
+                'message': '分单比例总和必须等于1'
+            }), 400
+
+        # 开始处理每个分单
+        success_splits = []
+        failed_splits = []
         
-        # 检查关键字段是否存在
-        if 'stock_id' not in original_transaction:
-            current_app.logger.warning(f"原始交易记录缺少stock_id字段，将使用默认值0")
-        
-        # 开始事务
-        conn.begin()
-        
-        # 检查是否已经存在分单记录
-        check_query = """
-        SELECT COUNT(*) as count FROM transaction_splits
-        WHERE original_transaction_id = %s
-        """
-        cursor.execute(check_query, (original_transaction_id,))
-        result = cursor.fetchone()
-        
-        if result and result['count'] > 0:
-            # 先删除已有的分单记录
-            delete_query = """
-            DELETE FROM transaction_splits
-            WHERE original_transaction_id = %s
-            """
-            cursor.execute(delete_query, (original_transaction_id,))
-        
-        # 插入新的分单记录
-        insert_query = """
-        INSERT INTO transaction_splits (
-            original_transaction_id, holder_id, holder_name, split_ratio,
-            transaction_date, stock_id, stock_code, stock_name, market,
-            transaction_code, transaction_type, total_amount, total_quantity,
-            broker_fee, stamp_duty, transaction_levy, trading_fee, deposit_fee,
-            prev_quantity, prev_cost, prev_avg_cost,
-            current_quantity, current_cost, current_avg_cost,
-            total_fees, net_amount, running_quantity, running_cost,
-            realized_profit, profit_rate, exchange_rate, remarks, avg_price
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-        )
-        """
-        
-        split_ids = []
-        for item in split_data:
-            split_ratio = item.get('split_ratio', 0)
-            holder_id = item.get('holder_id')
-            holder_name = item.get('holder_name', '')
-            
-            # 记录当前处理的分单项
-            current_app.logger.info(f"处理分单项: 持有人ID={holder_id}, 持有人名称={holder_name}, 分配比例={split_ratio}")
-            
-            # 如果没有提供持有人名称，尝试从数据库获取
-            if not holder_name and holder_id:
-                try:
-                    holder_query = "SELECT name FROM holders WHERE id = %s"
-                    cursor.execute(holder_query, (holder_id,))
-                    holder_result = cursor.fetchone()
-                    if holder_result:
-                        holder_name = holder_result['name']
-                        current_app.logger.info(f"从数据库获取持有人名称: {holder_name}")
-                except Exception as e:
-                    current_app.logger.error(f"获取持有人名称失败: {str(e)}")
-            
-            # 确保持有人名称不为空
-            if not holder_name:
-                holder_name = f"持有人ID: {holder_id}"
-                current_app.logger.warning(f"使用默认持有人名称: {holder_name}")
-            
-            # 计算分摊后的值
-            split_quantity = int(original_transaction['total_quantity'] * split_ratio)
-            
-            # 确保所有金额类型为float，避免Decimal和float混合运算
-            total_amount = float(original_transaction['total_amount'])
-            broker_fee = float(original_transaction['broker_fee']) if original_transaction['broker_fee'] else 0
-            stamp_duty = float(original_transaction['stamp_duty']) if original_transaction['stamp_duty'] else 0
-            transaction_levy = float(original_transaction['transaction_levy']) if original_transaction['transaction_levy'] else 0
-            trading_fee = float(original_transaction['trading_fee']) if original_transaction['trading_fee'] else 0
-            deposit_fee = float(original_transaction['deposit_fee']) if original_transaction['deposit_fee'] else 0
-            
-            split_amount = total_amount * split_ratio
-            split_broker_fee = broker_fee * split_ratio
-            split_stamp_duty = stamp_duty * split_ratio
-            split_transaction_levy = transaction_levy * split_ratio
-            split_trading_fee = trading_fee * split_ratio
-            split_deposit_fee = deposit_fee * split_ratio
-            
-            # 计算平均价格
-            split_avg_price = split_amount / split_quantity if split_quantity > 0 else 0
-            
-            # 计算总费用和净金额
-            split_total_fees = split_broker_fee + split_stamp_duty + split_transaction_levy + split_trading_fee + split_deposit_fee
-            
-            if original_transaction['transaction_type'].lower() == 'buy':
-                split_net_amount = split_amount + split_total_fees
-            else:  # sell
-                split_net_amount = split_amount - split_total_fees
-            
-            # 获取持有人最新持仓状态
-            holding_query = """
-            SELECT ts.*
-            FROM transaction_splits ts
-            INNER JOIN (
-                SELECT holder_id, stock_code, market, MAX(transaction_date) as max_date, MAX(id) as max_id
-                FROM transaction_splits
-                WHERE holder_id = %s 
-                    AND stock_code = %s 
-                    AND market = %s
-                    AND transaction_date <= %s
-                GROUP BY holder_id, stock_code, market
-            ) latest ON ts.holder_id = latest.holder_id 
-                AND ts.stock_code = latest.stock_code 
-                AND ts.market = latest.market
-                AND ts.transaction_date = latest.max_date
-                AND ts.id = latest.max_id
-            """
-            
-            cursor.execute(holding_query, (
-                holder_id, 
-                original_transaction['stock_code'], 
-                original_transaction['market'],
-                original_transaction['transaction_date']
-            ))
-            latest_holding = cursor.fetchone()
-            
-            # 初始化持仓状态
-            prev_quantity = Decimal('0')
-            prev_cost = Decimal('0')
-            prev_avg_cost = Decimal('0')
-            
-            # 如果有最新持仓记录，使用其状态
-            if latest_holding:
-                prev_quantity = Decimal(str(latest_holding['current_quantity']))
-                prev_cost = Decimal(str(latest_holding['current_cost']))
-                prev_avg_cost = Decimal(str(latest_holding['current_avg_cost']))
-                
-                current_app.logger.info(f"获取到最新持仓记录: 交易日期={latest_holding['transaction_date']}")
-            else:
-                current_app.logger.info("未找到历史持仓记录，使用初始值")
-            
-            # 构建交易数据
-            transaction_data = {
+        for split in data['splits']:
+            # 构建分单交易数据
+            split_transaction = {
+                'transaction_date': original_transaction['transaction_date'].strftime('%Y-%m-%d'),
+                'stock_code': original_transaction['stock_code'],
+                'market': original_transaction['market'],
                 'transaction_type': original_transaction['transaction_type'],
-                'total_quantity': split_quantity,
-                'total_amount': split_amount,
-                'broker_fee': split_broker_fee,
-                'stamp_duty': split_stamp_duty,
-                'transaction_levy': split_transaction_levy,
-                'trading_fee': split_trading_fee,
-                'deposit_fee': split_deposit_fee
+                'total_quantity': Decimal(str(original_transaction['total_quantity'])) * Decimal(str(split['ratio'])),
+                'total_amount': Decimal(str(original_transaction['total_amount'])) * Decimal(str(split['ratio'])),
+                'broker_fee': Decimal(str(original_transaction['broker_fee'])) * Decimal(str(split['ratio'])),
+                'stamp_duty': Decimal(str(original_transaction['stamp_duty'])) * Decimal(str(split['ratio'])),
+                'transaction_levy': Decimal(str(original_transaction['transaction_levy'])) * Decimal(str(split['ratio'])),
+                'trading_fee': Decimal(str(original_transaction['trading_fee'])) * Decimal(str(split['ratio'])),
+                'deposit_fee': Decimal(str(original_transaction['deposit_fee'])) * Decimal(str(split['ratio'])),
+                'split_ratio': split['ratio'],
+                'remarks': original_transaction['remarks']
             }
+
+            # 使用统一计算模块处理分单
+            success, result = TransactionCalculator.process_transaction(
+                db_conn=db,
+                transaction_data=split_transaction,
+                operation_type='split',
+                holder_id=split['holder_id'],
+                original_transaction_id=data['transaction_id']
+            )
+
+            if success:
+                success_splits.append({
+                    'holder_id': split['holder_id'],
+                    'split_id': result['split_id']
+                })
+            else:
+                failed_splits.append({
+                    'holder_id': split['holder_id'],
+                    'message': result.get('message', '分单处理失败')
+                })
+
+        # 如果有任何分单失败，回滚所有成功的分单
+        if failed_splits:
+            for split in success_splits:
+                TransactionCalculator.process_transaction(
+                    db_conn=db,
+                    transaction_data={'id': split['split_id']},
+                    operation_type='delete',
+                    holder_id=split['holder_id']
+                )
             
-            # 构建前值状态
-            prev_state = {
-                'quantity': prev_quantity,
-                'cost': prev_cost,
-                'avg_cost': prev_avg_cost
-            }
-            
-            # 使用TransactionCalculator计算持仓变化
-            try:
-                position_change = TransactionCalculator.calculate_position_change(transaction_data, prev_state)
-                
-                # 更新计算结果
-                current_quantity = position_change['current_quantity']
-                current_cost = position_change['current_cost']
-                current_avg_cost = position_change['current_avg_cost']
-                realized_profit = position_change['realized_profit']
-                profit_rate = position_change['profit_rate']
-                running_quantity = current_quantity
-                running_cost = current_cost
-                
-            except Exception as e:
-                current_app.logger.error(f"计算持仓变化失败: {str(e)}")
-                raise
-            
-            # 记录计算过程
-            current_app.logger.info(f"持仓计算过程:")
-            current_app.logger.info(f"1. 计算前持仓: 数量={prev_quantity}, 成本={prev_cost}, 均价={prev_avg_cost}")
-            current_app.logger.info(f"2. 本次交易: 类型={transaction_data['transaction_type']}, 数量={split_quantity}, 金额={split_amount}")
-            current_app.logger.info(f"3. 计算后持仓: 数量={current_quantity}, 成本={current_cost}, 均价={current_avg_cost}")
-            current_app.logger.info(f"4. 盈亏信息: 已实现盈亏={realized_profit}, 盈亏率={profit_rate}%")
-            
-            # 记录即将插入的分单记录数据
-            current_app.logger.info(f"准备插入分单记录: 持有人={holder_name}, 股票={original_transaction.get('stock_code')}, 市场={original_transaction.get('market')}")
-            current_app.logger.info(f"分单数据: 数量={split_quantity}, 金额={split_amount}, 平均价格={split_avg_price}, 净额={split_net_amount}")
-            current_app.logger.info(f"持仓变化: 前值={prev_quantity}/{prev_cost}/{prev_avg_cost}, 现值={current_quantity}/{current_cost}/{current_avg_cost}")
-            
-            # 插入分单记录
-            cursor.execute(insert_query, (
-                original_transaction_id, holder_id, holder_name, split_ratio,
-                original_transaction['transaction_date'], original_transaction.get('stock_id', 0), 
-                original_transaction['stock_code'], original_transaction['stock_name'], 
-                original_transaction['market'], original_transaction['transaction_code'],
-                original_transaction['transaction_type'], split_amount, split_quantity,
-                split_broker_fee, split_stamp_duty, split_transaction_levy, split_trading_fee, 
-                split_deposit_fee, 
-                prev_quantity, prev_cost, prev_avg_cost,
-                current_quantity, current_cost, current_avg_cost,
-                split_total_fees, split_net_amount, running_quantity, running_cost,
-                realized_profit, profit_rate,
-                original_transaction.get('exchange_rate', 1.0), 
-                f"分单自交易编号: {original_transaction['transaction_code']}",
-                split_avg_price
-            ))
-            
-            split_ids.append(cursor.lastrowid)
-        
-        # 提交事务
-        conn.commit()
-        
+            return jsonify({
+                'success': False,
+                'message': '部分分单处理失败',
+                'failed_splits': failed_splits
+            }), 400
+
+        # 重新计算后续交易记录
+        for split in success_splits:
+            TransactionCalculator.recalculate_subsequent_transactions(
+                db_conn=db,
+                stock_code=original_transaction['stock_code'],
+                market=original_transaction['market'],
+                start_date=original_transaction['transaction_date'].strftime('%Y-%m-%d'),
+                holder_id=split['holder_id']
+            )
+
         return jsonify({
             'success': True,
-            'message': '交易分单成功',
-            'data': {
-                'split_ids': split_ids
-            }
+            'message': '交易分单处理成功',
+            'splits': success_splits
         })
-        
+
     except Exception as e:
-        if conn:
-            conn.rollback()
-        current_app.logger.error(f"交易分单失败: {str(e)}")
+        logger.error(f"处理交易分单时发生错误: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'交易分单失败: {str(e)}'
+            'message': f'处理交易分单失败: {str(e)}'
         }), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
 
 @transaction_split_bp.route('/api/transaction/splits', methods=['GET'])
 @login_required
 def get_transaction_splits():
-    """
-    获取分单记录列表
-    """
+    """获取交易分单记录"""
     try:
-        # 解析查询参数
-        original_transaction_id = request.args.get('original_transaction_id')
-        holder_id = request.args.get('holder_id')
-        stock_code = request.args.get('stock_code')
-        market = request.args.get('market')
+        # 获取查询参数
+        transaction_id = request.args.get('transaction_id')
+        if not transaction_id:
+            return jsonify({
+                'success': False,
+                'message': '缺少交易ID参数'
+            }), 400
+
+        # 获取数据库连接
+        db = get_db_connection()
         
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        
-        # 构建查询语句
-        query = """
-        SELECT ts.*, t.transaction_code as original_transaction_code
-        FROM transaction_splits ts
-        LEFT JOIN stock_transactions t ON ts.original_transaction_id = t.id
-        WHERE 1=1
+        # 查询分单记录
+        sql = """
+            SELECT ts.*, h.name as holder_name
+            FROM transaction_splits ts
+            LEFT JOIN holders h ON ts.holder_id = h.id
+            WHERE ts.original_transaction_id = %s
+            ORDER BY ts.id
         """
-        params = []
+        splits = db.fetch_all(sql, [transaction_id])
         
-        if original_transaction_id:
-            query += " AND ts.original_transaction_id = %s"
-            params.append(original_transaction_id)
-        
-        if holder_id:
-            query += " AND ts.holder_id = %s"
-            params.append(holder_id)
-        
-        if stock_code:
-            query += " AND ts.stock_code = %s"
-            params.append(stock_code)
-        
-        if market:
-            query += " AND ts.market = %s"
-            params.append(market)
-        
-        # 添加排序
-        query += " ORDER BY ts.transaction_date DESC, ts.id DESC"
-        
-        # 执行查询
-        cursor.execute(query, tuple(params))
-        splits = cursor.fetchall()
-        
-        # 处理日期格式
+        # 格式化数据
+        formatted_splits = []
         for split in splits:
-            if split.get('transaction_date'):
-                split['transaction_date'] = split['transaction_date'].strftime('%Y-%m-%d')
-            if split.get('created_at'):
-                split['created_at'] = split['created_at'].strftime('%Y-%m-%d %H:%M:%S')
-            if split.get('updated_at'):
-                split['updated_at'] = split['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
-        
+            formatted_splits.append({
+                'id': split['id'],
+                'holder_id': split['holder_id'],
+                'holder_name': split['holder_name'],
+                'split_ratio': float(split['split_ratio']),
+                'total_quantity': float(split['total_quantity']),
+                'total_amount': float(split['total_amount']),
+                'realized_profit': float(split['realized_profit']),
+                'profit_rate': float(split['profit_rate']),
+                'current_quantity': float(split['current_quantity']),
+                'current_cost': float(split['current_cost']),
+                'current_avg_cost': float(split['current_avg_cost']),
+                'total_fees': float(split['total_fees'])
+            })
+            
         return jsonify({
             'success': True,
-            'data': {
-                'items': splits,
-                'total': len(splits)
-            }
+            'splits': formatted_splits
         })
         
     except Exception as e:
-        current_app.logger.error(f"获取分单记录失败: {str(e)}")
+        logger.error(f"获取交易分单记录时发生错误: {str(e)}")
         return jsonify({
             'success': False,
-            'message': f'获取分单记录失败: {str(e)}'
+            'message': f'获取交易分单记录失败: {str(e)}'
         }), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
 
 def register_routes(app):
     """

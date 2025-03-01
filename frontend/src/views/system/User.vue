@@ -372,9 +372,9 @@ const showEditUserModal = (user) => {
   userForm.value = {
     id: user.id,
     username: user.username,
-    name: user.name,
-    email: user.email,
-    status: user.status.toString()
+    name: user.name || '',
+    email: user.email || '',
+    status: user.is_active ? '1' : '0'
   }
   new Modal(userModal.value).show()
 }
@@ -399,40 +399,32 @@ const confirmDeleteUser = (user) => {
 // 提交用户表单
 const submitUserForm = async () => {
   try {
-    if (isEditing.value) {
-      // 编辑用户
-      await axios.put(`/api/system/user/update/${userForm.value.id}`, userForm.value)
-      message.success('用户更新成功')
+    const formData = {
+      username: userForm.value.username,
+      name: userForm.value.name,
+      email: userForm.value.email,
+      is_active: userForm.value.status === '1'
+    }
+
+    if (!isEditing.value) {
+      // 添加用户时需要密码
+      formData.password = userForm.value.password
+      await axios.post('/api/system/user/add', formData)
+      message.success('添加用户成功')
     } else {
-      // 添加用户
-      await axios.post('/api/system/user/add', userForm.value)
-      message.success('用户添加成功')
-    }
-    
-    // 关闭模态框并刷新列表
-    try {
-      if (userModal.value) {
-        const modalInstance = Modal.getInstance(userModal.value)
-        if (modalInstance) {
-          modalInstance.hide()
-        } else {
-          // 如果无法获取模态框实例，使用原生方法关闭
-          userModal.value.classList.remove('show')
-          userModal.value.style.display = 'none'
-          document.body.classList.remove('modal-open')
-          const backdrop = document.querySelector('.modal-backdrop')
-          if (backdrop && backdrop.parentNode) {
-            backdrop.parentNode.removeChild(backdrop)
-          }
-        }
+      // 编辑用户
+      if (userForm.value.password) {
+        formData.password = userForm.value.password
       }
-    } catch (modalError) {
-      console.error('关闭模态框失败:', modalError)
+      await axios.put(`/api/system/user/update/${userForm.value.id}`, formData)
+      message.success('更新用户成功')
     }
-    
-    loadUsers()
+
+    // 关闭模态框并刷新列表
+    new Modal(userModal.value).hide()
+    await loadUsers()
   } catch (err) {
-    message.error('操作失败: ' + (err.response?.data?.message || err.message))
+    message.error(isEditing.value ? '更新用户失败' : '添加用户失败' + ': ' + (err.response?.data?.message || err.message))
   }
 }
 

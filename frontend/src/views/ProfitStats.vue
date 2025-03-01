@@ -244,7 +244,7 @@
                                 <th class="text-end fees">费用</th>
                                 <th class="text-end profit">盈亏</th>
                                 <th class="text-end current-price">盈亏率</th>
-                                <th class="text-end holding-value"></th>
+                                <th class="text-end holding-value">持有人</th>
                                 <th class="text-end total-profit"></th>
                                 <th class="text-end profit-rate"></th>
                               </tr>
@@ -286,10 +286,10 @@
                                   <td class="text-end" :class="getProfitClass(calculateProfitRate(detail))">
                                     {{ detail.transaction_type.toLowerCase() === 'sell' ? formatRate(calculateProfitRate(detail)) : '-' }}
                                   </td>
+                                  <td class="text-end">{{ detail.holder_name || '-' }}</td>
                                   <td class="text-end">-</td>
                                   <td class="text-end">-</td>
-                                  <td class="text-end">-</td>
-                                  <td class="text-end">-</td>
+
                   </tr>
                               </template>
                               <tr v-else>
@@ -362,7 +362,7 @@
                                 <th class="text-end fees">费用</th>
                                 <th class="text-end profit">盈亏</th>
                                 <th class="text-end current-price">盈亏率</th>
-                                <th class="text-end holding-value"></th>
+                                <th class="text-end holding-value">持有人</th>
                                 <th class="text-end total-profit"></th>
                                 <th class="text-end profit-rate"></th>
                               </tr>
@@ -404,10 +404,10 @@
                                   <td class="text-end" :class="getProfitClass(calculateProfitRate(detail))">
                                     {{ detail.transaction_type.toLowerCase() === 'sell' ? formatRate(calculateProfitRate(detail)) : '-' }}
                                   </td>
+                                  <td class="text-end">{{ detail.holder_name || '-' }}</td>
                                   <td class="text-end">-</td>
                                   <td class="text-end">-</td>
-                                  <td class="text-end">-</td>
-                                  <td class="text-end">-</td>
+
                                 </tr>
                               </template>
                               <tr v-else>

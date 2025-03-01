@@ -95,17 +95,6 @@ def update_transaction(id):
         data = request.get_json()
         logger.info(f"更新交易记录: ID={id}, 数据={data}")
         
-        # 检查编辑的合法性
-        is_valid, message, transaction = TransactionService.check_edit_validity(
-            db, session['user_id'], id, data
-        )
-        
-        if not is_valid:
-            return jsonify({
-                'success': False,
-                'message': message
-            }), 400
-        
         # 使用交易服务处理编辑操作
         success, result, status_code = TransactionService.process_transaction(
             db, session['user_id'], data, id
@@ -134,16 +123,13 @@ def update_transaction(id):
 def delete_transaction(id):
     """删除交易记录"""
     try:
-        # 检查删除的合法性
-        is_valid, message, transaction = TransactionService.check_delete_validity(
-            db, session['user_id'], id
-        )
-        
-        if not is_valid:
+        # 获取原始交易记录
+        transaction = TransactionQuery.get_transaction_by_id(id, session['user_id'])
+        if not transaction:
             return jsonify({
                 'success': False,
-                'message': message
-            }), 400
+                'message': '交易记录不存在或无权限删除'
+            }), 404
         
         # 使用交易服务处理删除操作
         success, result, status_code = TransactionService.process_transaction(

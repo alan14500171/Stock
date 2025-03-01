@@ -283,22 +283,14 @@ def update_user(user_id):
             }), 404
             
         # 更新用户信息
-        if 'username' in data:
-            # 检查用户名是否已存在
-            existing_user = User.find_by_username(data['username'])
-            if existing_user and existing_user.id != user.id:
-                return jsonify({
-                    'success': False,
-                    'message': f'用户名 {data["username"]} 已存在'
-                }), 400
-                
-            user.username = data['username']
-            
-        if 'password' in data and data['password']:
-            user.set_password(data['password'])
-            
-        if 'is_active' in data:
-            user.is_active = data['is_active']
+        user.name = data.get('name', user.name)
+        user.email = data.get('email', user.email)
+        user.is_active = data.get('is_active', user.is_active)
+        
+        # 如果提供了新密码，则更新密码
+        new_password = data.get('password')
+        if new_password:
+            user.set_password(new_password)
             
         if not user.save():
             return jsonify({
@@ -306,9 +298,10 @@ def update_user(user_id):
                 'message': '更新用户失败'
             }), 500
             
-        # 分配角色
-        if 'role_ids' in data:
-            UserRole.assign_roles_to_user(user.id, data['role_ids'])
+        # 更新角色
+        role_ids = data.get('role_ids')
+        if role_ids is not None:
+            UserRole.assign_roles_to_user(user.id, role_ids)
             
         return jsonify({
             'success': True,
