@@ -879,8 +879,8 @@ def get_profit_stats():
         market = request.args.get('market')
 
         # 2. 构建查询条件
-        conditions = ['t.user_id = %s']
-        params = [user_id]
+        conditions = ['(t.user_id = %s OR h.user_id = %s)']
+        params = [user_id, user_id]
 
         if start_date:
             conditions.append('t.transaction_date >= %s')
@@ -928,6 +928,7 @@ def get_profit_stats():
             SELECT ut.*, s.code_name as stock_name
             FROM user_transactions ut
             LEFT JOIN stocks s ON ut.stock_code = s.code AND ut.market = s.market
+            WHERE 1=1
         """
 
         transactions = db.fetch_all(sql, params)

@@ -74,7 +74,7 @@ class TransactionQuery:
         """
         # 构建基础查询
         sql = """
-            SELECT 
+            SELECT DISTINCT
                 t.*,
                 s.code_name as stock_name,
                 (t.broker_fee + t.transaction_levy + t.stamp_duty + t.trading_fee + t.deposit_fee) as total_fees,
@@ -86,9 +86,11 @@ class TransactionQuery:
                 END as net_amount
             FROM stock.stock_transactions t
             LEFT JOIN stock.stocks s ON t.stock_code = s.code AND t.market = s.market
-            WHERE t.user_id = %s
+            LEFT JOIN stock.transaction_splits ts ON t.id = ts.original_transaction_id
+            LEFT JOIN stock.holders h ON ts.holder_id = h.id
+            WHERE (t.user_id = %s OR h.user_id = %s)
         """
-        params = [user_id]
+        params = [user_id, user_id]
         
         # 添加过滤条件
         if filters:
