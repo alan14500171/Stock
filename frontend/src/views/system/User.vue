@@ -154,16 +154,6 @@
                   required
                 >
               </div>
-              <div class="mb-3" v-if="!isEditing">
-                <label for="password" class="form-label">密码</label>
-                <input 
-                  type="password" 
-                  class="form-control" 
-                  id="password" 
-                  v-model="userForm.password"
-                  required
-                >
-              </div>
               <div class="mb-3">
                 <label for="name" class="form-label">姓名</label>
                 <input 
@@ -183,15 +173,52 @@
                   v-model="userForm.email"
                 >
               </div>
-              <div class="mb-3">
-                <label for="status" class="form-label">状态</label>
-                <select class="form-select" id="status" v-model="userForm.status">
-                  <option value="1">启用</option>
-                  <option value="0">禁用</option>
-                </select>
+              <div class="mb-3" v-if="isEditing">
+                <div class="form-check">
+                  <input 
+                    type="checkbox" 
+                    class="form-check-input" 
+                    id="changePassword" 
+                    v-model="userForm.changePassword"
+                  >
+                  <label class="form-check-label" for="changePassword">修改密码</label>
+                </div>
               </div>
-              <div class="text-end">
-                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">取消</button>
+              <div class="mb-3" v-if="!isEditing || userForm.changePassword">
+                <label for="password" class="form-label">{{ isEditing ? '新密码' : '密码' }}</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="password" 
+                  v-model="userForm.password"
+                  :required="!isEditing"
+                >
+              </div>
+              <div class="mb-3">
+                <label class="form-label">状态</label>
+                <div class="form-check">
+                  <input 
+                    type="radio" 
+                    class="form-check-input" 
+                    id="statusActive" 
+                    value="1" 
+                    v-model="userForm.status"
+                  >
+                  <label class="form-check-label" for="statusActive">启用</label>
+                </div>
+                <div class="form-check">
+                  <input 
+                    type="radio" 
+                    class="form-check-input" 
+                    id="statusInactive" 
+                    value="0" 
+                    v-model="userForm.status"
+                  >
+                  <label class="form-check-label" for="statusInactive">禁用</label>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="submit" class="btn btn-primary">保存</button>
               </div>
             </form>
@@ -311,7 +338,8 @@ const userForm = ref({
   password: '',
   name: '',
   email: '',
-  status: '1'
+  status: '1',
+  changePassword: false
 })
 
 // 编辑状态
@@ -372,9 +400,11 @@ const showEditUserModal = (user) => {
   userForm.value = {
     id: user.id,
     username: user.username,
-    name: user.name || '',
+    name: user.display_name || '',
     email: user.email || '',
-    status: user.is_active ? '1' : '0'
+    status: user.is_active ? '1' : '0',
+    password: '',
+    changePassword: false
   }
   new Modal(userModal.value).show()
 }
@@ -406,25 +436,46 @@ const submitUserForm = async () => {
       is_active: userForm.value.status === '1'
     }
 
-    if (!isEditing.value) {
-      // 添加用户时需要密码
+    if (!isEditing.value || userForm.value.changePassword) {
+      if (!userForm.value.password) {
+        message.error('请输入密码')
+        return
+      }
       formData.password = userForm.value.password
+    }
+
+    if (!isEditing.value) {
       await axios.post('/api/system/user/add', formData)
       message.success('添加用户成功')
     } else {
-      // 编辑用户
-      if (userForm.value.password) {
-        formData.password = userForm.value.password
-      }
       await axios.put(`/api/system/user/update/${userForm.value.id}`, formData)
       message.success('更新用户成功')
     }
 
     // 关闭模态框并刷新列表
-    new Modal(userModal.value).hide()
+    try {
+      if (userModal.value) {
+        const modalInstance = Modal.getInstance(userModal.value)
+        if (modalInstance) {
+          modalInstance.hide()
+        } else {
+          // 如果无法获取模态框实例，使用原生方法关闭
+          userModal.value.classList.remove('show')
+          userModal.value.style.display = 'none'
+          document.body.classList.remove('modal-open')
+          const backdrop = document.querySelector('.modal-backdrop')
+          if (backdrop && backdrop.parentNode) {
+            backdrop.parentNode.removeChild(backdrop)
+          }
+        }
+      }
+    } catch (modalError) {
+      console.error('关闭模态框失败:', modalError)
+    }
+
     await loadUsers()
   } catch (err) {
-    message.error(isEditing.value ? '更新用户失败' : '添加用户失败' + ': ' + (err.response?.data?.message || err.message))
+    message.error((isEditing.value ? '更新用户失败' : '添加用户失败') + ': ' + (err.response?.data?.message || err.message))
   }
 }
 

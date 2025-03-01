@@ -53,7 +53,7 @@ class User:
                 sql = """
                     UPDATE stock.users 
                     SET username = %s, password_hash = %s, 
-                        name = %s, email = %s,
+                        display_name = %s, email = %s,
                         is_active = %s, last_login = %s 
                     WHERE id = %s
                 """
@@ -67,7 +67,7 @@ class User:
                 # 新增
                 sql = """
                     INSERT INTO stock.users 
-                    (username, password_hash, name, email, is_active, created_at) 
+                    (username, password_hash, display_name, email, is_active, created_at) 
                     VALUES (%s, %s, %s, %s, %s, NOW())
                 """
                 params = (

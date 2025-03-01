@@ -270,50 +270,37 @@ def add_user():
 @login_required
 @permission_required('system:user:edit')
 def update_user(user_id):
-    """更新用户"""
+    """更新用户信息"""
     try:
         data = request.get_json()
-        
-        # 获取用户
         user = User.get_by_id(user_id)
         if not user:
-            return jsonify({
-                'success': False,
-                'message': '用户不存在'
-            }), 404
-            
-        # 更新用户信息
-        user.name = data.get('name', user.name)
-        user.email = data.get('email', user.email)
-        user.is_active = data.get('is_active', user.is_active)
-        
-        # 如果提供了新密码，则更新密码
-        new_password = data.get('password')
-        if new_password:
-            user.set_password(new_password)
-            
+            return jsonify({'code': 404, 'message': '用户不存在'}), 404
+
+        # 更新基本信息
+        if 'username' in data:
+            user.username = data['username']
+        if 'name' in data:
+            user.name = data['name']  # 将存储到 display_name 字段
+        if 'email' in data:
+            user.email = data['email']
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+
         if not user.save():
-            return jsonify({
-                'success': False,
-                'message': '更新用户失败'
-            }), 500
-            
-        # 更新角色
-        role_ids = data.get('role_ids')
-        if role_ids is not None:
-            UserRole.assign_roles_to_user(user.id, role_ids)
-            
+            return jsonify({'code': 500, 'message': '更新用户失败'}), 500
+
         return jsonify({
-            'success': True,
-            'message': '更新用户成功',
+            'code': 200,
+            'message': '更新成功',
             'data': user.to_dict()
         })
+
     except Exception as e:
         logger.error(f"更新用户失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f"更新用户失败: {str(e)}"
-        }), 500
+        return jsonify({'code': 500, 'message': str(e)}), 500
 
 @user_bp.route('/delete/<int:user_id>', methods=['DELETE'])
 @login_required
