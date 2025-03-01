@@ -228,31 +228,22 @@ def add_user():
             
         # 自动创建同名持有人
         try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
             # 检查持有人名称是否已存在
-            check_query = "SELECT COUNT(*) FROM holders WHERE name = %s"
-            cursor.execute(check_query, (username,))
-            count = cursor.fetchone()[0]
+            check_sql = "SELECT COUNT(*) as count FROM holders WHERE name = %s"
+            result = db.fetch_one(check_sql, [username])
+            count = result['count'] if result else 0
             
             # 如果不存在，则创建持有人
             if count == 0:
-                insert_query = """
+                insert_sql = """
                 INSERT INTO holders (name, type, user_id, status)
                 VALUES (%s, %s, %s, %s)
                 """
-                cursor.execute(insert_query, (username, 'individual', user.id, 1))
-                conn.commit()
+                db.execute(insert_sql, [username, 'individual', user.id, 1])
                 logger.info(f"为用户 {username} 自动创建了同名持有人")
             
         except Exception as e:
             logger.error(f"为用户 {username} 创建持有人失败: {str(e)}")
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
             
         return jsonify({
             'success': True,
