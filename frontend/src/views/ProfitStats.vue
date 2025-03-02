@@ -258,7 +258,6 @@
                                       {{ detail.transaction_type.toLowerCase() === 'buy' ? '买入' : '卖出' }}
                                     </span>
                                     <span class="transaction-code">{{ detail.transaction_code.trim() }}</span>
-                                    <span v-if="detail.holder_name" class="holder-name">({{ detail.holder_name }})</span>
                                   </td>
                                   <td class="quantity-price">
                                     {{ formatNumber(detail.total_quantity, 0) }} @ 
@@ -376,7 +375,6 @@
                                       {{ detail.transaction_type.toLowerCase() === 'buy' ? '买入' : '卖出' }}
                                     </span>
                                     <span class="transaction-code">{{ detail.transaction_code.trim() }}</span>
-                                    <span v-if="detail.holder_name" class="holder-name">({{ detail.holder_name }})</span>
                                   </td>
                                   <td class="quantity-price">
                                     {{ formatNumber(detail.total_quantity, 0) }} @ 
