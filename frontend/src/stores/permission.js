@@ -97,23 +97,86 @@ export const usePermissionStore = defineStore('permission', () => {
   const setAdminPermissions = () => {
     console.log('设置管理员权限')
     permissions.value = [
-      { code: 'system:user:view' },
-      { code: 'system:role:view' },
-      { code: 'system:permission:view' },
-      { code: 'system:user:add' },
-      { code: 'system:user:edit' },
-      { code: 'system:user:delete' },
-      { code: 'system:role:add' },
-      { code: 'system:role:edit' },
-      { code: 'system:role:delete' },
-      { code: 'system:permission:add' },
-      { code: 'system:permission:edit' },
-      { code: 'system:permission:delete' },
-      { code: 'system:user:list' },
-      { code: 'system:role:list' },
-      { code: 'system:permission:list' }
+      // 股票管理
+      'stock',
+      'stock:list',
+      'stock:list:view',
+      'stock:list:add',
+      'stock:list:edit',
+      'stock:list:delete',
+      'stock:holdings',
+      'stock:holdings:view',
+      'stock:holdings:export',
+      
+      // 交易管理
+      'transaction',
+      'transaction:records',
+      'transaction:records:view',
+      'transaction:records:add',
+      'transaction:records:edit',
+      'transaction:records:delete',
+      'transaction:records:export',
+      'transaction:stats',
+      'transaction:stats:view',
+      'transaction:stats:export',
+      'transaction:split',
+      'transaction:split:view',
+      'transaction:split:add',
+      'transaction:split:edit',
+      'transaction:split:delete',
+      
+      // 收益统计
+      'profit',
+      'profit:stats',
+      'profit:stats:view',
+      'profit:overview',
+      'profit:overview:view',
+      'profit:overview:export',
+      'profit:details',
+      'profit:details:view',
+      'profit:details:export',
+      
+      // 汇率管理
+      'exchange',
+      'exchange:rates',
+      'exchange:rates:view',
+      'exchange:rates:add',
+      'exchange:rates:edit',
+      'exchange:rates:delete',
+      'exchange:converter',
+      'exchange:converter:use',
+      
+      // 系统管理
+      'system',
+      'system:user',
+      'system:user:view',
+      'system:user:add',
+      'system:user:edit',
+      'system:user:delete',
+      'system:user:assign',
+      'system:role',
+      'system:role:view',
+      'system:role:add',
+      'system:role:edit',
+      'system:role:delete',
+      'system:role:assign',
+      'system:permission',
+      'system:permission:view',
+      'system:permission:add',
+      'system:permission:edit',
+      'system:permission:delete',
+      'system:settings',
+      'system:settings:view',
+      'system:settings:edit',
+      'system:holder',
+      'system:holder:view',
+      'system:holder:add',
+      'system:holder:edit',
+      'system:holder:delete'
     ]
-    roles.value = [{ name: 'admin' }]
+    
+    // 设置角色
+    roles.value = ['admin']
     loaded.value = true
     console.log('管理员权限设置完成')
   }

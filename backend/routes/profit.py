@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, session
 from routes.auth import login_required
+from utils.auth import permission_required
 from config.database import db
 from datetime import datetime
 from models import Stock, StockTransaction
@@ -230,6 +231,7 @@ def process_transactions(transactions):
 
 @profit_bp.route('/')
 @login_required
+@permission_required('profit:stats:view')
 def get_profit_stats():
     """获取盈利统计数据"""
     try:
@@ -333,6 +335,7 @@ def get_profit_stats():
 
 @profit_bp.route('/holding_stocks')
 @login_required
+@permission_required('profit:stats:view')
 def get_holding_stocks_api():
     """获取持仓股票列表API"""
     try:
@@ -427,6 +430,7 @@ def get_holding_stocks_api():
 
 @profit_bp.route('/refresh_prices', methods=['POST'])
 @login_required
+@permission_required('profit:stats:view')
 def refresh_stock_prices():
     """刷新股票现价"""
     try:

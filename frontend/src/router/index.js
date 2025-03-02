@@ -53,8 +53,7 @@ const routes = [
   },
   {
     path: '/profit/stats',
-    name: 'ProfitStats',
-    component: ProfitStats,
+    component: () => import('../views/ProfitStats.vue'),
     meta: { 
       title: '收益统计',
       requiresAuth: true,
@@ -63,19 +62,20 @@ const routes = [
   },
   {
     path: '/transaction/list',
-    name: 'TransactionList',
     component: TransactionList,
     meta: { 
       title: '交易记录',
-      requiresAuth: true 
+      requiresAuth: true,
+      permission: 'transaction:records:view'
     }
   },
   {
-    path: '/transaction/add',
+    path: '/transactions/add',
     component: () => import('../views/TransactionAdd.vue'),
     meta: { 
       title: '添加交易',
-      requiresAuth: true 
+      requiresAuth: true,
+      permission: 'transaction:records:add'
     }
   },
   {
@@ -83,7 +83,8 @@ const routes = [
     component: () => import('../views/TransactionEdit.vue'),
     meta: { 
       title: '编辑交易',
-      requiresAuth: true 
+      requiresAuth: true,
+      permission: 'transaction:records:edit'
     }
   },
   {
@@ -91,7 +92,8 @@ const routes = [
     component: ExchangeRateManager,
     meta: { 
       title: '汇率管理',
-      requiresAuth: true 
+      requiresAuth: true,
+      permission: 'exchange:rates:view'
     }
   },
   {
@@ -99,7 +101,8 @@ const routes = [
     component: StockManager,
     meta: {
       title: '股票管理',
-      requiresAuth: true
+      requiresAuth: true,
+      permission: 'stock:list:view'
     }
   },
   // 系统管理路由
