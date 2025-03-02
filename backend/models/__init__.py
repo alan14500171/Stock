@@ -6,9 +6,8 @@ from .stock_model import Stock
 from .transaction import StockTransaction, TransactionDetail
 from .exchange import ExchangeRate
 from .role import Role
-from .permission import Permission
+from .permission import Permission, RolePermission
 from .user_role import UserRole
-from .role_permission import RolePermission
 
 __all__ = [
     'User', 

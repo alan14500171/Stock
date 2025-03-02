@@ -33,7 +33,7 @@ def get_permission_list():
 def get_permission_tree():
     """获取权限树"""
     try:
-        tree = Permission.get_tree()
+        tree = Permission.get_permission_tree()
         return jsonify({
             'success': True,
             'data': tree

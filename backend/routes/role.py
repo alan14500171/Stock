@@ -2,7 +2,7 @@
 角色管理API路由
 """
 from flask import Blueprint, request, jsonify
-from models import Role
+from models import Role, Permission, RolePermission
 from utils.auth import login_required, permission_required
 from config.database import db
 import logging
@@ -38,8 +38,19 @@ def get_role_list():
         params.extend([page_size, (page - 1) * page_size])
         
         # 查询数据
-        roles = db.fetch_all(sql, params)
+        roles_data = db.fetch_all(sql, params)
+        roles = []
         
+        for role_data in roles_data:
+            role = Role(role_data)
+            role_dict = role.to_dict()
+            
+            # 获取角色权限
+            permissions = Permission.get_role_permissions(role.id)
+            role_dict['permissions'] = [permission.to_dict() for permission in permissions]
+            
+            roles.append(role_dict)
+            
         return jsonify({
             'success': True,
             'data': {
@@ -59,12 +70,10 @@ def get_role_list():
 def get_all_roles():
     """获取所有角色（不分页）"""
     try:
-        sql = "SELECT * FROM roles ORDER BY name"
-        roles = db.fetch_all(sql)
-        
+        roles = Role.get_all()
         return jsonify({
             'success': True,
-            'data': roles
+            'data': [role.to_dict() for role in roles]
         })
     except Exception as e:
         logger.error(f"获取所有角色失败: {str(e)}")
@@ -79,18 +88,22 @@ def get_all_roles():
 def get_role_detail(role_id):
     """获取角色详情"""
     try:
-        sql = "SELECT * FROM roles WHERE id = %s"
-        role = db.fetch_one(sql, (role_id,))
-        
+        role = Role.get_by_id(role_id)
         if not role:
             return jsonify({
                 'success': False,
                 'message': '角色不存在'
             }), 404
             
+        role_dict = role.to_dict()
+        
+        # 获取角色权限
+        permissions = Permission.get_role_permissions(role.id)
+        role_dict['permissions'] = [permission.to_dict() for permission in permissions]
+        
         return jsonify({
             'success': True,
-            'data': role
+            'data': role_dict
         })
     except Exception as e:
         logger.error(f"获取角色详情失败: {str(e)}")
@@ -138,6 +151,11 @@ def add_role():
                 'success': False,
                 'message': '添加角色失败'
             }), 500
+            
+        # 分配权限
+        permission_ids = data.get('permission_ids', [])
+        if permission_ids:
+            RolePermission.assign_permissions_to_role(role_id, permission_ids)
             
         # 获取新创建的角色
         sql = "SELECT * FROM roles WHERE id = %s"
@@ -198,6 +216,10 @@ def update_role(role_id):
                 'message': '更新角色失败'
             }), 500
             
+        # 分配权限
+        if 'permission_ids' in data:
+            RolePermission.assign_permissions_to_role(role_id, data['permission_ids'])
+            
         # 获取更新后的角色
         sql = "SELECT * FROM roles WHERE id = %s"
         updated_role = db.fetch_one(sql, [role_id])
@@ -246,4 +268,39 @@ def delete_role(role_id):
         return jsonify({
             'success': False,
             'message': f"删除角色失败: {str(e)}"
+        }), 500
+
+@role_bp.route('/assign-permissions/<int:role_id>', methods=['POST'])
+@login_required
+@permission_required('system:role:assign')
+def assign_permissions(role_id):
+    """为角色分配权限"""
+    try:
+        data = request.get_json()
+        permission_ids = data.get('permission_ids', [])
+        
+        # 获取角色
+        role = Role.get_by_id(role_id)
+        if not role:
+            return jsonify({
+                'success': False,
+                'message': '角色不存在'
+            }), 404
+            
+        # 分配权限
+        if RolePermission.assign_permissions_to_role(role.id, permission_ids):
+            return jsonify({
+                'success': True,
+                'message': '分配权限成功'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '分配权限失败'
+            }), 500
+    except Exception as e:
+        logger.error(f"分配权限失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f"分配权限失败: {str(e)}"
         }), 500 

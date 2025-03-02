@@ -1,5 +1,5 @@
 """
-权限模型 - 用于树状权限管理
+权限模型 - 用于RBAC权限管理
 """
 from datetime import datetime
 from config.database import db
@@ -11,17 +11,17 @@ class Permission:
     def __init__(self, data=None):
         self.id = data.get('id') if data else None
         self.name = data.get('name') if data else None
-        self.code = data.get('code') if data else None  # 权限唯一标识符
+        self.code = data.get('code') if data else None
         self.description = data.get('description') if data else None
-        self.type = data.get('type', 3) if data else 3  # 权限类型：1-模块，2-菜单，3-按钮，4-数据，5-接口
-        self.parent_id = data.get('parent_id') if data else None  # 父权限ID，用于树状结构
-        self.path = data.get('path') if data else None  # 权限路径，用于快速查询
-        self.level = data.get('level', 0) if data else 0  # 权限层级
-        self.sort_order = data.get('sort_order', 0) if data else 0  # 排序顺序
-        self.is_menu = data.get('is_menu', False) if data else False  # 是否为菜单项
-        self.icon = data.get('icon') if data else None  # 菜单图标
-        self.component = data.get('component') if data else None  # 前端组件路径
-        self.route_path = data.get('route_path') if data else None  # 路由路径
+        self.type = data.get('type') if data else None
+        self.parent_id = data.get('parent_id') if data else None
+        self.path = data.get('path') if data else None
+        self.level = data.get('level') if data else None
+        self.sort_order = data.get('sort_order') if data else None
+        self.is_menu = data.get('is_menu') if data else None
+        self.icon = data.get('icon') if data else None
+        self.component = data.get('component') if data else None
+        self.route_path = data.get('route_path') if data else None
         self.created_at = data.get('created_at') if data else datetime.utcnow()
         self.updated_at = data.get('updated_at') if data else datetime.utcnow()
         
@@ -140,17 +140,6 @@ class Permission:
         
     def to_dict(self):
         """转换为字典"""
-        # 获取父级权限名称
-        parent_name = None
-        if self.parent_id:
-            try:
-                sql = "SELECT name FROM stock.permissions WHERE id = %s"
-                result = db.fetch_one(sql, (self.parent_id,))
-                if result:
-                    parent_name = result['name']
-            except Exception as e:
-                logger.error(f"获取父级权限名称失败: {str(e)}")
-        
         return {
             'id': self.id,
             'name': self.name,
@@ -158,7 +147,6 @@ class Permission:
             'description': self.description,
             'type': self.type,
             'parent_id': self.parent_id,
-            'parent_name': parent_name,  # 添加父级权限名称
             'path': self.path,
             'level': self.level,
             'sort_order': self.sort_order,
@@ -166,26 +154,15 @@ class Permission:
             'icon': self.icon,
             'component': self.component,
             'route_path': self.route_path,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+            'updated_at': self.updated_at.isoformat() if isinstance(self.updated_at, datetime) else self.updated_at
         }
-        
-    @staticmethod
-    def get_by_id(permission_id):
-        """根据ID获取权限"""
-        try:
-            sql = "SELECT * FROM stock.permissions WHERE id = %s"
-            data = db.fetch_one(sql, (permission_id,))
-            return Permission(data) if data else None
-        except Exception as e:
-            logger.error(f"获取权限失败: {str(e)}")
-            return None
         
     @staticmethod
     def get_all():
         """获取所有权限"""
         try:
-            sql = "SELECT * FROM stock.permissions ORDER BY sort_order, name"
+            sql = "SELECT * FROM permissions ORDER BY sort_order, id"
             data = db.fetch_all(sql)
             return [Permission(item) for item in data]
         except Exception as e:
@@ -193,35 +170,87 @@ class Permission:
             return []
             
     @staticmethod
-    def get_tree():
+    def get_by_id(permission_id):
+        """根据ID获取权限"""
+        try:
+            sql = "SELECT * FROM permissions WHERE id = %s"
+            data = db.fetch_one(sql, (permission_id,))
+            return Permission(data) if data else None
+        except Exception as e:
+            logger.error(f"获取权限失败: {str(e)}")
+            return None
+            
+    @staticmethod
+    def get_by_code(code):
+        """根据代码获取权限"""
+        try:
+            sql = "SELECT * FROM permissions WHERE code = %s"
+            data = db.fetch_one(sql, (code,))
+            return Permission(data) if data else None
+        except Exception as e:
+            logger.error(f"获取权限失败: {str(e)}")
+            return None
+            
+    @staticmethod
+    def get_role_permissions(role_id):
+        """获取角色的所有权限"""
+        try:
+            sql = """
+                SELECT p.* FROM permissions p
+                JOIN role_permissions rp ON p.id = rp.permission_id
+                WHERE rp.role_id = %s
+                ORDER BY p.sort_order, p.id
+            """
+            data = db.fetch_all(sql, (role_id,))
+            return [Permission(item) for item in data]
+        except Exception as e:
+            logger.error(f"获取角色权限失败: {str(e)}")
+            return []
+            
+    @staticmethod
+    def get_user_permissions(user_id):
+        """获取用户的所有权限"""
+        try:
+            sql = """
+                SELECT DISTINCT p.* FROM permissions p
+                JOIN role_permissions rp ON p.id = rp.permission_id
+                JOIN user_roles ur ON rp.role_id = ur.role_id
+                WHERE ur.user_id = %s
+                ORDER BY p.sort_order, p.id
+            """
+            data = db.fetch_all(sql, (user_id,))
+            return [Permission(item) for item in data]
+        except Exception as e:
+            logger.error(f"获取用户权限失败: {str(e)}")
+            return []
+            
+    @staticmethod
+    def get_permission_tree():
         """获取权限树"""
         try:
             # 获取所有权限
             permissions = Permission.get_all()
             
-            # 构建树
+            # 构建权限树
             tree = []
             permission_map = {}
             
             # 先构建映射
             for permission in permissions:
-                permission_map[permission.id] = {
-                    **permission.to_dict(),
-                    'children': []
-                }
+                permission_map[permission.id] = permission.to_dict()
+                permission_map[permission.id]['children'] = []
                 
             # 构建树结构
             for permission in permissions:
-                if permission.parent_id is None:
-                    # 根节点
+                if permission.parent_id is None or permission.parent_id == 0:
+                    # 顶级权限
                     tree.append(permission_map[permission.id])
                 else:
-                    # 子节点
-                    if permission.parent_id in permission_map:
-                        permission_map[permission.parent_id]['children'].append(
-                            permission_map[permission.id]
-                        )
-            
+                    # 子权限
+                    parent = permission_map.get(permission.parent_id)
+                    if parent:
+                        parent['children'].append(permission_map[permission.id])
+                        
             return tree
         except Exception as e:
             logger.error(f"获取权限树失败: {str(e)}")
@@ -243,17 +272,6 @@ class Permission:
             return []
             
     @staticmethod
-    def get_by_code(code):
-        """根据代码获取权限"""
-        try:
-            sql = "SELECT * FROM stock.permissions WHERE code = %s"
-            data = db.fetch_one(sql, (code,))
-            return Permission(data) if data else None
-        except Exception as e:
-            logger.error(f"根据代码获取权限失败: {str(e)}")
-            return None
-            
-    @staticmethod
     def get_by_path(path):
         """根据路径获取权限"""
         try:
@@ -263,36 +281,38 @@ class Permission:
         except Exception as e:
             logger.error(f"根据路径获取权限失败: {str(e)}")
             return None
-            
+
+class RolePermission:
+    """角色权限关联模型"""
+    
     @staticmethod
-    def get_user_permissions(user_id):
-        """获取用户的所有权限"""
+    def assign_permissions_to_role(role_id, permission_ids):
+        """为角色分配权限"""
         try:
-            sql = """
-                SELECT DISTINCT p.* FROM stock.permissions p
-                JOIN stock.role_permissions rp ON p.id = rp.permission_id
-                JOIN stock.user_roles ur ON rp.role_id = ur.role_id
-                WHERE ur.user_id = %s
-                ORDER BY p.sort_order, p.name
-            """
-            data = db.fetch_all(sql, (user_id,))
-            return [Permission(item) for item in data]
-        except Exception as e:
-            logger.error(f"获取用户权限失败: {str(e)}")
-            return []
+            # 先删除角色的所有权限
+            delete_sql = "DELETE FROM role_permissions WHERE role_id = %s"
+            db.execute(delete_sql, (role_id,))
             
-    @staticmethod
-    def get_role_permissions(role_id):
-        """获取角色的所有权限"""
-        try:
-            sql = """
-                SELECT p.* FROM stock.permissions p
-                JOIN stock.role_permissions rp ON p.id = rp.permission_id
-                WHERE rp.role_id = %s
-                ORDER BY p.sort_order, p.name
-            """
-            data = db.fetch_all(sql, (role_id,))
-            return [Permission(item) for item in data]
+            # 如果没有权限需要分配，直接返回成功
+            if not permission_ids:
+                return True
+                
+            # 批量插入新权限
+            values = []
+            params = []
+            
+            for permission_id in permission_ids:
+                values.append("(%s, %s)")
+                params.extend([role_id, permission_id])
+                
+            if values:
+                insert_sql = f"""
+                    INSERT INTO role_permissions (role_id, permission_id)
+                    VALUES {', '.join(values)}
+                """
+                return db.execute(insert_sql, params)
+            
+            return True
         except Exception as e:
-            logger.error(f"获取角色权限失败: {str(e)}")
-            return [] 
+            logger.error(f"为角色分配权限失败: {str(e)}")
+            return False 
