@@ -208,6 +208,8 @@ def split_transaction():
     """处理交易分单"""
     try:
         data = request.get_json()
+        logger.info(f"收到分单请求数据: {data}")
+        
         if not data:
             return jsonify({
                 'success': False,
@@ -215,25 +217,32 @@ def split_transaction():
             }), 400
 
         # 获取原始交易记录
-        db = get_db_connection()
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        
         original_transaction_sql = """
             SELECT * FROM stock_transactions 
             WHERE id = %s AND user_id = %s
         """
-        original_transaction = db.fetch_one(
-            original_transaction_sql, 
-            [data['transaction_id'], session['user_id']]
-        )
+        logger.info(f"查询原始交易记录: id={data['transaction_id']}, user_id={session['user_id']}")
+        cursor.execute(original_transaction_sql, [data['transaction_id'], session['user_id']])
+        original_transaction = cursor.fetchone()
         
         if not original_transaction:
+            logger.warning(f"未找到原始交易记录: id={data['transaction_id']}, user_id={session['user_id']}")
             return jsonify({
                 'success': False,
                 'message': '找不到原始交易记录'
             }), 404
 
+        logger.info(f"找到原始交易记录: {original_transaction}")
+
         # 验证分单比例总和
         total_ratio = sum(Decimal(str(split['ratio'])) for split in data['splits'])
+        logger.info(f"分单比例总和: {total_ratio}")
+        
         if total_ratio != Decimal('1'):
+            logger.warning(f"分单比例总和不等于1: {total_ratio}")
             return jsonify({
                 'success': False,
                 'message': '分单比例总和必须等于1'
@@ -258,12 +267,12 @@ def split_transaction():
                 'trading_fee': Decimal(str(original_transaction['trading_fee'])) * Decimal(str(split['ratio'])),
                 'deposit_fee': Decimal(str(original_transaction['deposit_fee'])) * Decimal(str(split['ratio'])),
                 'split_ratio': split['ratio'],
-                'remarks': original_transaction['remarks']
+                'remarks': original_transaction.get('remarks', '') or ''
             }
 
             # 使用统一计算模块处理分单
             success, result = TransactionCalculator.process_transaction(
-                db_conn=db,
+                db_conn=conn,
                 transaction_data=split_transaction,
                 operation_type='split',
                 holder_id=split['holder_id'],
@@ -285,7 +294,7 @@ def split_transaction():
         if failed_splits:
             for split in success_splits:
                 TransactionCalculator.process_transaction(
-                    db_conn=db,
+                    db_conn=conn,
                     transaction_data={'id': split['split_id']},
                     operation_type='delete',
                     holder_id=split['holder_id']
@@ -300,7 +309,7 @@ def split_transaction():
         # 重新计算后续交易记录
         for split in success_splits:
             TransactionCalculator.recalculate_subsequent_transactions(
-                db_conn=db,
+                db_conn=conn,
                 stock_code=original_transaction['stock_code'],
                 market=original_transaction['market'],
                 start_date=original_transaction['transaction_date'].strftime('%Y-%m-%d'),
@@ -334,7 +343,8 @@ def get_transaction_splits():
             }), 400
 
         # 获取数据库连接
-        db = get_db_connection()
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # 查询分单记录
         sql = """
@@ -344,7 +354,8 @@ def get_transaction_splits():
             WHERE ts.original_transaction_id = %s
             ORDER BY ts.id
         """
-        splits = db.fetch_all(sql, [transaction_id])
+        cursor.execute(sql, [transaction_id])
+        splits = cursor.fetchall()
         
         # 格式化数据
         formatted_splits = []
@@ -375,6 +386,11 @@ def get_transaction_splits():
             'success': False,
             'message': f'获取交易分单记录失败: {str(e)}'
         }), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 def register_routes(app):
     """

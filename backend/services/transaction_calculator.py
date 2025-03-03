@@ -191,11 +191,14 @@ class TransactionCalculator:
             LIMIT 1
         """
         
-        result = db_conn.fetch_one(sql, [
+        cursor = db_conn.cursor()
+        cursor.execute(sql, [
             user_or_holder_id, stock_code, market,
             transaction_date, transaction_date,
             transaction_id or 0
         ])
+        result = cursor.fetchone()
+        cursor.close()
         
         if result:
             return {
@@ -381,8 +384,13 @@ class TransactionCalculator:
                 """
                 params = [transaction_data['id']]
             
-            success = db_conn.execute(delete_sql, params)
-            if not success:
+            cursor = db_conn.cursor()
+            cursor.execute(delete_sql, params)
+            affected_rows = cursor.rowcount
+            db_conn.commit()
+            cursor.close()
+            
+            if affected_rows == 0:
                 return False, {'message': '删除交易记录失败'}
                 
             return True, {'prev_state': prev_state}
@@ -401,10 +409,29 @@ class TransactionCalculator:
     ) -> Tuple[bool, Dict[str, Any]]:
         """处理交易分单"""
         try:
+            logger.info(f"开始处理交易分单: holder_id={holder_id}, original_transaction_id={original_transaction_id}")
+            logger.info(f"交易数据: {transaction_data}")
+            logger.info(f"持仓变化: {position_change}")
+            
+            # 获取股票名称
+            cursor = db_conn.cursor()
+            stock_name_sql = """
+                SELECT code_name FROM stocks 
+                WHERE code = %s AND market = %s
+                LIMIT 1
+            """
+            cursor.execute(stock_name_sql, [
+                transaction_data['stock_code'],
+                transaction_data['market']
+            ])
+            stock_result = cursor.fetchone()
+            stock_name = stock_result['code_name'] if stock_result else transaction_data['stock_code']
+            cursor.close()
+            
             insert_sql = """
                 INSERT INTO transaction_splits (
                     original_transaction_id, holder_id, split_ratio,
-                    transaction_date, stock_code, market,
+                    transaction_date, stock_code, market, stock_name,
                     transaction_type, total_quantity, total_amount,
                     broker_fee, stamp_duty, transaction_levy,
                     trading_fee, deposit_fee, prev_quantity,
@@ -415,7 +442,7 @@ class TransactionCalculator:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s
                 )
             """
             
@@ -426,6 +453,7 @@ class TransactionCalculator:
                 transaction_data['transaction_date'],
                 transaction_data['stock_code'],
                 transaction_data['market'],
+                stock_name,
                 transaction_data['transaction_type'],
                 transaction_data['total_quantity'],
                 transaction_data['total_amount'],
@@ -445,11 +473,22 @@ class TransactionCalculator:
                 position_change['realized_profit'],
                 position_change['profit_rate'],
                 position_change['avg_price'],
-                transaction_data.get('remarks', '')
+                transaction_data.get('remarks', '') or ''
             ]
             
-            split_id = db_conn.insert(insert_sql, params)
+            logger.info(f"执行SQL: {insert_sql}")
+            logger.info(f"参数: {params}")
+            
+            cursor = db_conn.cursor()
+            cursor.execute(insert_sql, params)
+            split_id = cursor.lastrowid
+            db_conn.commit()
+            cursor.close()
+            
+            logger.info(f"分单记录插入成功，ID: {split_id}")
+            
             if not split_id:
+                logger.error("插入分单记录失败，未获取到ID")
                 return False, {'message': '插入分单记录失败'}
                 
             return True, {
@@ -506,7 +545,11 @@ class TransactionCalculator:
                 """
                 params = [stock_code, market, start_date]
             
-            transactions = db_conn.fetch_all(sql, params)
+            cursor = db_conn.cursor()
+            cursor.execute(sql, params)
+            transactions = cursor.fetchall()
+            cursor.close()
+            
             if not transactions:
                 return True
             
@@ -593,8 +636,10 @@ class TransactionCalculator:
                     trans['id']
                 ]
                 
-                if not db_conn.execute(update_sql, params):
-                    return False
+                cursor = db_conn.cursor()
+                cursor.execute(update_sql, params)
+                db_conn.commit()
+                cursor.close()
                 
                 # 更新前值状态用于下一次计算
                 prev_state = {

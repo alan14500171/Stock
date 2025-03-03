@@ -446,10 +446,10 @@ const loadSplitHistory = async () => {
 
   try {
     const response = await axios.get('/api/transaction/splits', {
-      params: { original_transaction_id: transaction.value.id }
+      params: { transaction_id: transaction.value.id }
     })
     if (response.data.success) {
-      splitHistory.value = response.data.data.items
+      splitHistory.value = response.data.splits
     }
   } catch (error) {
     console.error('加载分单历史失败:', error)
@@ -554,18 +554,22 @@ const saveSplit = async () => {
   try {
     // 准备提交的数据
     const data = {
-      original_transaction_id: transaction.value.id,
-      split_data: splitItems.value.map(item => ({
+      transaction_id: transaction.value.id,
+      splits: splitItems.value.map(item => ({
         holder_id: item.holder_id,
         holder_name: item.holder_name,
-        split_ratio: item.ratio / 100, // 转换为0-1之间的小数
+        ratio: item.ratio / 100, // 转换为0-1之间的小数
         quantity: item.quantity,
         amount: item.amount,
         fees: item.fees
       }))
     }
     
+    console.log('提交分单数据:', JSON.stringify(data))
+    
     const response = await axios.post('/api/transaction/split', data)
+    
+    console.log('分单保存响应:', response.data)
     
     if (response.data.success) {
       toast.success('分单保存成功')
@@ -582,6 +586,9 @@ const saveSplit = async () => {
     }
   } catch (error) {
     console.error('保存分单失败:', error)
+    if (error.response) {
+      console.error('错误响应:', error.response.data)
+    }
     toast.error(`保存分单失败: ${error.response?.data?.message || '未知错误'}`)
   } finally {
     savingData.value = false
