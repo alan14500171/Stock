@@ -14,49 +14,49 @@
                 <i class="bi bi-house-door"></i> 首页
               </router-link>
             </li>
-            <li class="nav-item">
+            <li class="nav-item" v-if="hasPermission('profit:stats:view')">
               <router-link to="/profit/stats" class="nav-link">
                 <i class="bi bi-bar-chart"></i> 收益统计
               </router-link>
             </li>
-            <li class="nav-item">
+            <li class="nav-item" v-if="hasPermission('transaction:records:view')">
               <router-link to="/transaction/list" class="nav-link">
                 <i class="bi bi-list-ul"></i> 交易记录
               </router-link>
             </li>
-            <li class="nav-item">
+            <li class="nav-item" v-if="hasPermission('exchange:rates:view')">
               <router-link to="/exchange/rate" class="nav-link">
                 <i class="bi bi-currency-exchange"></i> 汇率管理
               </router-link>
             </li>
-            <li class="nav-item">
+            <li class="nav-item" v-if="hasPermission('stock:list:view')">
               <router-link to="/stock" class="nav-link">
                 <i class="bi bi-graph-up"></i> 股票管理
               </router-link>
             </li>
             
             <!-- 系统管理下拉菜单 -->
-            <li class="nav-item dropdown">
+            <li class="nav-item dropdown" v-if="hasAnySystemPermission">
               <a class="nav-link dropdown-toggle" href="#" id="systemDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-gear"></i> 系统管理
               </a>
               <ul class="dropdown-menu" aria-labelledby="systemDropdown">
-                <li>
+                <li v-if="hasPermission('system:user:view')">
                   <router-link to="/system/user" class="dropdown-item">
                     <i class="bi bi-people"></i> 用户管理
                   </router-link>
                 </li>
-                <li>
+                <li v-if="hasPermission('system:role:view')">
                   <router-link to="/system/role" class="dropdown-item">
                     <i class="bi bi-person-badge"></i> 角色管理
                   </router-link>
                 </li>
-                <li>
+                <li v-if="hasPermission('system:permission:view')">
                   <router-link to="/system/permission" class="dropdown-item">
                     <i class="bi bi-shield-lock"></i> 权限管理
                   </router-link>
                 </li>
-                <li>
+                <li v-if="hasPermission('system:holder:view')">
                   <router-link to="/system/holder" class="dropdown-item">
                     <i class="bi bi-person-vcard"></i> 持有人管理
                   </router-link>
