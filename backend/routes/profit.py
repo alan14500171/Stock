@@ -18,9 +18,10 @@ def process_transactions(transactions):
     market_stats = {}
     stock_stats = {}
     transaction_details = {}
+    sorted_stock_stats = {}  # 添加这一行，确保变量在使用前初始化
     
-    # 按日期排序交易记录
-    transactions.sort(key=lambda x: (x['transaction_date'], x['id']))
+    # 按日期排序交易记录 - 修复：使用sorted函数而不是直接调用sort方法
+    transactions = sorted(transactions, key=lambda x: (x['transaction_date'], x['id']))
     
     # 按股票分组处理交易记录
     stock_groups = {}
@@ -242,13 +243,26 @@ def get_profit_stats():
         market = request.args.get('market')
         holder_id = request.args.get('holder_id')
 
+        # 获取用户关联的持有人ID
+        holder_sql = "SELECT id FROM stock.holders WHERE user_id = %s"
+        user_holders = db.fetch_all(holder_sql, [user_id])
+        user_holder_ids = [h['id'] for h in user_holders]
+        
+        logger.info(f"用户 {user_id} 关联的持有人IDs: {user_holder_ids}")
+
         # 2. 构建查询条件
         conditions = []
         params = []
 
-        # 添加用户ID条件（通过关联原始交易表）
-        conditions.append('t.user_id = %s')
-        params.append(user_id)
+        # 修改用户ID条件，允许查看与用户关联的分单
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            conditions.append(f'(t.user_id = %s OR ts.holder_id IN ({holder_placeholders}))')
+            params.append(user_id)
+            params.extend(user_holder_ids)
+        else:
+            conditions.append('t.user_id = %s')
+            params.append(user_id)
 
         if start_date:
             conditions.append('ts.transaction_date >= %s')
@@ -266,7 +280,7 @@ def get_profit_stats():
         where_clause = ' AND '.join(conditions)
 
         # 3. 获取交易明细数据
-        sql = f"""
+        cte_sql = """
             WITH last_transaction_dates AS (
                 SELECT 
                     ts.market COLLATE utf8mb4_unicode_ci as market,
@@ -274,9 +288,22 @@ def get_profit_stats():
                     MAX(ts.transaction_date) as last_transaction_date
                 FROM stock.transaction_splits ts
                 JOIN stock.stock_transactions t ON ts.original_transaction_id = t.id
-                WHERE t.user_id = %s
+                WHERE """
+        
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            cte_sql += f"(t.user_id = %s OR ts.holder_id IN ({holder_placeholders}))"
+            all_params_for_cte = [user_id] + user_holder_ids
+        else:
+            cte_sql += "t.user_id = %s"
+            all_params_for_cte = [user_id]
+            
+        cte_sql += """
                 GROUP BY ts.market, ts.stock_code
             )
+        """
+        
+        main_sql = """
             SELECT 
                 ts.id,
                 ts.original_transaction_id,
@@ -306,13 +333,18 @@ def get_profit_stats():
             JOIN stock.stock_transactions t ON ts.original_transaction_id = t.id
             LEFT JOIN stock.stocks s ON ts.stock_code COLLATE utf8mb4_unicode_ci = s.code AND ts.market COLLATE utf8mb4_unicode_ci = s.market
             LEFT JOIN last_transaction_dates ltd ON ts.market COLLATE utf8mb4_unicode_ci = ltd.market AND ts.stock_code COLLATE utf8mb4_unicode_ci = ltd.stock_code
-            WHERE {where_clause}
+            WHERE """ + where_clause + """
             ORDER BY ltd.last_transaction_date DESC, ts.transaction_date DESC, ts.id DESC
         """
+        
+        sql = cte_sql + main_sql
 
-        # 在参数列表开头添加user_id参数
-        all_params = [user_id] + params
+        # 在参数列表开头添加CTE的参数
+        all_params = all_params_for_cte + params
+        logger.info(f"执行SQL: {sql}")
+        logger.info(f"参数: {all_params}")
         transactions = db.fetch_all(sql, all_params)
+        logger.info(f"查询到 {len(transactions)} 条交易记录")
 
         # 4. 处理交易数据
         market_stats, stock_stats, transaction_details = process_transactions(transactions)
@@ -343,8 +375,15 @@ def get_holding_stocks_api():
         user_id = session.get('user_id')
         holder_id = request.args.get('holder_id')
         
+        # 获取用户关联的持有人ID
+        holder_sql = "SELECT id FROM stock.holders WHERE user_id = %s"
+        user_holders = db.fetch_all(holder_sql, [user_id])
+        user_holder_ids = [h['id'] for h in user_holders]
+        
+        logger.info(f"用户 {user_id} 关联的持有人IDs: {user_holder_ids}")
+        
         # 构建SQL查询
-        sql = """
+        cte_sql = """
         WITH last_transaction_dates AS (
             SELECT 
                 ts.market COLLATE utf8mb4_unicode_ci as market,
@@ -352,9 +391,46 @@ def get_holding_stocks_api():
                 MAX(ts.transaction_date) as last_transaction_date
             FROM stock.transaction_splits ts
             JOIN stock.stock_transactions t ON ts.original_transaction_id = t.id
-            WHERE t.user_id = %s
+            WHERE """
+            
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            cte_sql += f"(t.user_id = %s OR ts.holder_id IN ({holder_placeholders}))"
+            cte_params = [user_id] + user_holder_ids
+        else:
+            cte_sql += "t.user_id = %s"
+            cte_params = [user_id]
+            
+        cte_sql += """
             GROUP BY ts.market, ts.stock_code
         )
+        """
+        
+        avg_cost_sql = """
+        (
+            SELECT ts_last.current_avg_cost
+            FROM stock.transaction_splits ts_last
+            JOIN stock.stock_transactions t_last ON ts_last.original_transaction_id = t_last.id
+            WHERE """
+                
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            avg_cost_sql += f"(t_last.user_id = %s OR ts_last.holder_id IN ({holder_placeholders}))"
+            avg_cost_params = [user_id] + user_holder_ids
+        else:
+            avg_cost_sql += "t_last.user_id = %s"
+            avg_cost_params = [user_id]
+            
+        avg_cost_sql += """
+              AND ts_last.market = ts.market
+              AND ts_last.stock_code = ts.stock_code
+              AND UPPER(ts_last.transaction_type) = 'BUY'
+            ORDER BY ts_last.transaction_date DESC, ts_last.id DESC
+            LIMIT 1
+        ) as avg_cost
+        """
+        
+        main_sql = """
         SELECT 
             ts.market,
             ts.stock_code,
@@ -366,38 +442,40 @@ def get_holding_stocks_api():
             SUM(CASE WHEN UPPER(ts.transaction_type) = 'SELL' THEN ts.total_amount ELSE 0 END) as total_sell_amount,
             SUM(CASE WHEN UPPER(ts.transaction_type) = 'BUY' THEN ts.broker_fee + ts.transaction_levy + ts.stamp_duty + ts.trading_fee + ts.deposit_fee ELSE 0 END) as total_buy_fees,
             SUM(CASE WHEN UPPER(ts.transaction_type) = 'SELL' THEN ts.broker_fee + ts.transaction_levy + ts.stamp_duty + ts.trading_fee + ts.deposit_fee ELSE 0 END) as total_sell_fees,
-            (
-                SELECT ts_last.current_avg_cost
-                FROM stock.transaction_splits ts_last
-                JOIN stock.stock_transactions t_last ON ts_last.original_transaction_id = t_last.id
-                WHERE t_last.user_id = %s
-                  AND ts_last.market = ts.market
-                  AND ts_last.stock_code = ts.stock_code
-                  AND UPPER(ts_last.transaction_type) = 'BUY'
-                ORDER BY ts_last.transaction_date DESC, ts_last.id DESC
-                LIMIT 1
-            ) as avg_cost,
+        """ + avg_cost_sql + """,
             MAX(ltd.last_transaction_date) as last_transaction_date
         FROM stock.transaction_splits ts
         JOIN stock.stock_transactions t ON ts.original_transaction_id = t.id
         LEFT JOIN last_transaction_dates ltd ON ts.market COLLATE utf8mb4_unicode_ci = ltd.market AND ts.stock_code COLLATE utf8mb4_unicode_ci = ltd.stock_code
-        WHERE t.user_id = %s
-        """
+        WHERE """
         
-        params = [user_id, user_id, user_id]
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            main_sql += f"(t.user_id = %s OR ts.holder_id IN ({holder_placeholders}))"
+            where_params = [user_id] + user_holder_ids
+        else:
+            main_sql += "t.user_id = %s"
+            where_params = [user_id]
+        
+        # 合并所有参数
+        params = cte_params + avg_cost_params + where_params
         
         if holder_id:
-            sql += " AND ts.holder_id = %s"
+            main_sql += " AND ts.holder_id = %s"
             params.append(holder_id)
             
-        sql += """
+        main_sql += """
         GROUP BY ts.market, ts.stock_code, ts.stock_name
         HAVING SUM(CASE WHEN UPPER(ts.transaction_type) = 'BUY' THEN ts.total_quantity ELSE -ts.total_quantity END) > 0
         ORDER BY last_transaction_date DESC, ts.market, ts.stock_code
         """
         
-        # 执行查询
+        sql = cte_sql + main_sql
+        
+        logger.info(f"执行SQL: {sql}")
+        logger.info(f"参数: {params}")
         stocks = db.fetch_all(sql, params)
+        logger.info(f"查询到 {len(stocks)} 条持仓记录")
         
         # 处理结果
         result = []
@@ -435,8 +513,43 @@ def refresh_stock_prices():
     """刷新股票现价"""
     try:
         logger.info("开始刷新股票现价...")
+        
+        user_id = session.get('user_id')
+        holder_id = request.args.get('holder_id')
+        
+        # 获取用户关联的持有人ID
+        holder_sql = "SELECT id FROM stock.holders WHERE user_id = %s"
+        user_holders = db.fetch_all(holder_sql, [user_id])
+        user_holder_ids = [h['id'] for h in user_holders]
+        
+        logger.info(f"用户 {user_id} 关联的持有人IDs: {user_holder_ids}")
+        
         # 获取持仓股票列表
-        sql = """
+        avg_cost_sql = """
+                (
+                    SELECT ts_last.current_avg_cost
+                    FROM stock.transaction_splits ts_last
+                    JOIN stock.stock_transactions t_last ON ts_last.original_transaction_id = t_last.id
+                    WHERE """
+                    
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            avg_cost_sql += f"(t_last.user_id = %s OR ts_last.holder_id IN ({holder_placeholders}))"
+            avg_cost_params = [user_id] + user_holder_ids
+        else:
+            avg_cost_sql += "t_last.user_id = %s"
+            avg_cost_params = [user_id]
+            
+        avg_cost_sql += """
+                      AND ts_last.market = s.market
+                      AND ts_last.stock_code = s.code
+                      AND UPPER(ts_last.transaction_type) = 'BUY'
+                    ORDER BY ts_last.transaction_date DESC, ts_last.id DESC
+                    LIMIT 1
+                ) as last_buy_avg_cost
+        """
+        
+        main_sql = """
             SELECT 
                 s.market,
                 s.code,
@@ -450,33 +563,28 @@ def refresh_stock_prices():
                 SUM(CASE WHEN UPPER(ts.transaction_type) = 'BUY' THEN ts.total_amount ELSE 0 END) as total_buy,
                 SUM(CASE WHEN UPPER(ts.transaction_type) = 'SELL' THEN ts.total_amount ELSE 0 END) as total_sell,
                 SUM(ts.broker_fee + ts.transaction_levy + ts.stamp_duty + ts.trading_fee + ts.deposit_fee) as total_fees,
-                (
-                    SELECT ts_last.current_avg_cost
-                    FROM stock.transaction_splits ts_last
-                    JOIN stock.stock_transactions t_last ON ts_last.original_transaction_id = t_last.id
-                    WHERE t_last.user_id = %s
-                      AND ts_last.market = s.market
-                      AND ts_last.stock_code = s.code
-                      AND UPPER(ts_last.transaction_type) = 'BUY'
-                    ORDER BY ts_last.transaction_date DESC, ts_last.id DESC
-                    LIMIT 1
-                ) as last_buy_avg_cost
+        """ + avg_cost_sql + """
             FROM stock.transaction_splits ts
             JOIN stock.stock_transactions t ON ts.original_transaction_id = t.id
             JOIN stock.stocks s ON ts.stock_code COLLATE utf8mb4_unicode_ci = s.code AND ts.market COLLATE utf8mb4_unicode_ci = s.market
-            WHERE t.user_id = %s
-        """
+            WHERE """
+            
+        if user_holder_ids:
+            holder_placeholders = ', '.join(['%s'] * len(user_holder_ids))
+            main_sql += f"(t.user_id = %s OR ts.holder_id IN ({holder_placeholders}))"
+            where_params = [user_id] + user_holder_ids
+        else:
+            main_sql += "t.user_id = %s"
+            where_params = [user_id]
         
-        user_id = session.get('user_id')
-        holder_id = request.args.get('holder_id')
-        
-        params = [user_id, user_id]
+        # 合并所有参数
+        params = avg_cost_params + where_params
         
         if holder_id:
-            sql = sql.replace("WHERE t.user_id = %s", "WHERE t.user_id = %s AND ts.holder_id = %s")
-            params = [user_id, user_id, holder_id]
+            main_sql += " AND ts.holder_id = %s"
+            params.append(holder_id)
         
-        sql += """
+        main_sql += """
             GROUP BY s.market, s.code, s.code_name, s.google_name
             HAVING SUM(CASE 
                 WHEN UPPER(ts.transaction_type) = 'BUY' THEN ts.total_quantity 
@@ -485,9 +593,13 @@ def refresh_stock_prices():
             END) > 0
         """
         
+        sql = main_sql
+        
         logger.info(f"查询用户 {user_id} 的持仓股票")
+        logger.info(f"执行SQL: {sql}")
+        logger.info(f"参数: {params}")
         stocks = db.fetch_all(sql, params)
-        logger.info(f"找到 {len(stocks)} 支持仓股票")
+        logger.info(f"查询到 {len(stocks)} 条持仓记录")
         
         results = []
         success_count = 0
