@@ -7,222 +7,222 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # 无颜色
 
+# 配置文件
+DOCKER_COMPOSE_FILE="docker-compose.nginx.yml"
+CONTAINER_NAME="stock-frontend-nginx"
+
 # 日志函数
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+log_debug() {
+    echo -e "${BLUE}[DEBUG]${NC} $1"
+}
+
 # 检查Docker是否安装
 check_docker() {
     if ! command -v docker &> /dev/null; then
-        log_error "Docker未安装。请先在群辉套件中心安装Docker。"
+        log_error "Docker未安装，请先安装Docker"
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null; then
-        log_error "Docker Compose未安装。请确保Docker套件已正确安装。"
+    if ! docker info &> /dev/null; then
+        log_error "Docker服务未运行或当前用户没有权限"
+        log_info "请尝试以下命令："
+        log_info "  sudo systemctl start docker"
+        log_info "  或者将当前用户添加到docker组：sudo usermod -aG docker \$USER"
         exit 1
     fi
+    
+    log_info "Docker检查通过"
 }
 
-# 检查配置文件
-check_config_files() {
-    if [ ! -f "docker-compose.nginx.yml" ]; then
-        log_error "docker-compose.nginx.yml文件不存在。"
+# 检查配置文件是否存在
+check_config() {
+    if [ ! -f "$DOCKER_COMPOSE_FILE" ]; then
+        log_error "配置文件 $DOCKER_COMPOSE_FILE 不存在"
         exit 1
     fi
     
-    if [ ! -f "nginx.conf" ]; then
-        log_error "nginx.conf文件不存在。"
-        exit 1
-    fi
-    
-    if [ ! -f "Dockerfile.nginx" ]; then
-        log_error "Dockerfile.nginx文件不存在。"
-        exit 1
-    fi
+    log_info "配置文件检查通过"
 }
 
-# 检查端口是否被占用
+# 检查端口是否可用
 check_port() {
-    local port=$1
+    PORT=$(grep -oP '(?<=:)[0-9]+(?=:)' "$DOCKER_COMPOSE_FILE" | head -1)
+    if [ -z "$PORT" ]; then
+        PORT=8080 # 默认端口
+    fi
+    
     if command -v netstat &> /dev/null; then
-        if netstat -tuln | grep -q ":$port "; then
-            return 0
-        fi
-    elif command -v ss &> /dev/null; then
-        if ss -tuln | grep -q ":$port "; then
-            return 0
+        if netstat -tuln | grep -q ":$PORT "; then
+            log_warn "端口 $PORT 已被占用，可能会导致启动失败"
+        else
+            log_info "端口 $PORT 可用"
         fi
     else
-        log_warning "无法检查端口占用情况，netstat和ss命令都不可用。"
-        return 1
+        log_warn "无法检查端口占用情况，netstat命令不可用"
     fi
-    return 1
+}
+
+# 检查是否为群辉NAS环境
+check_synology() {
+    if [ -f "/etc/synoinfo.conf" ]; then
+        log_info "检测到群辉NAS环境"
+        # 群辉NAS特定配置
+        if grep -q "network_mode: \"host\"" "$DOCKER_COMPOSE_FILE"; then
+            log_info "已配置host网络模式"
+        else
+            log_warn "建议在群辉NAS环境中使用host网络模式"
+        fi
+    fi
 }
 
 # 启动服务
 start_service() {
-    log_info "正在启动前端服务..."
-    
-    # 检查端口占用
-    if check_port 8080; then
-        log_warning "端口8080已被占用。请修改docker-compose.nginx.yml中的端口映射。"
-        log_info "您可以编辑docker-compose.nginx.yml文件，将'8080:80'改为其他端口，如'8081:80'"
-        read -p "是否继续启动？(y/n): " continue_start
-        if [[ "$continue_start" != "y" && "$continue_start" != "Y" ]]; then
-            log_info "已取消启动。"
-            exit 0
-        fi
-    fi
-    
-    # 群辉NAS特定处理
-    if [ -f "/etc/synoinfo.conf" ]; then
-        log_info "检测到群辉NAS环境，应用特定配置..."
-        
-        # 检查是否需要使用host网络模式
-        if grep -q "network_mode: \"host\"" docker-compose.nginx.yml; then
-            log_info "已配置host网络模式。"
-        else
-            log_warning "群辉NAS环境可能需要使用host网络模式。"
-            log_info "如果遇到网络问题，请取消注释docker-compose.nginx.yml中的'network_mode: \"host\"'行。"
-        fi
-    fi
-    
-    docker-compose -f docker-compose.nginx.yml up -d
-    
+    log_info "正在启动服务..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
     if [ $? -eq 0 ]; then
-        log_success "前端服务已成功启动！"
-        log_info "您可以通过以下地址访问：http://$(hostname -I | awk '{print $1}'):8080"
+        log_info "服务已成功启动"
     else
-        log_error "启动服务失败，请检查错误信息。"
+        log_error "服务启动失败"
+        exit 1
     fi
 }
 
 # 停止服务
 stop_service() {
-    log_info "正在停止前端服务..."
-    docker-compose -f docker-compose.nginx.yml down
-    
+    log_info "正在停止服务..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" down
     if [ $? -eq 0 ]; then
-        log_success "前端服务已停止。"
+        log_info "服务已停止"
     else
-        log_error "停止服务失败，请检查错误信息。"
+        log_error "服务停止失败"
+        exit 1
     fi
 }
 
 # 重启服务
 restart_service() {
-    log_info "正在重启前端服务..."
-    docker-compose -f docker-compose.nginx.yml restart
-    
+    log_info "正在重启服务..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" restart
     if [ $? -eq 0 ]; then
-        log_success "前端服务已重启。"
+        log_info "服务已重启"
     else
-        log_error "重启服务失败，请检查错误信息。"
+        log_error "服务重启失败"
+        exit 1
     fi
 }
 
-# 查看日志
-view_logs() {
-    log_info "查看服务日志..."
-    docker-compose -f docker-compose.nginx.yml logs -f
+# 查看服务状态
+status_service() {
+    log_info "服务状态："
+    docker-compose -f "$DOCKER_COMPOSE_FILE" ps
 }
 
-# 重建服务
-rebuild_service() {
-    log_info "正在重建前端服务..."
-    docker-compose -f docker-compose.nginx.yml down
-    docker-compose -f docker-compose.nginx.yml build --no-cache
-    docker-compose -f docker-compose.nginx.yml up -d
-    
+# 查看服务日志
+logs_service() {
+    log_info "服务日志："
+    docker-compose -f "$DOCKER_COMPOSE_FILE" logs --tail=100
+}
+
+# 构建镜像
+build_image() {
+    log_info "正在构建镜像..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" build
     if [ $? -eq 0 ]; then
-        log_success "前端服务已重建并启动。"
+        log_info "镜像构建成功"
     else
-        log_error "重建服务失败，请检查错误信息。"
+        log_error "镜像构建失败"
+        exit 1
+    fi
+}
+
+# 重新构建并启动
+rebuild_service() {
+    log_info "正在重新构建并启动服务..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --build
+    if [ $? -eq 0 ]; then
+        log_info "服务已重新构建并启动"
+    else
+        log_error "服务重新构建失败"
+        exit 1
     fi
 }
 
 # 清理资源
 clean_resources() {
-    log_info "正在清理资源..."
-    docker-compose -f docker-compose.nginx.yml down -v
-    docker rmi stock-frontend-nginx:latest
-    
-    if [ $? -eq 0 ]; then
-        log_success "资源已清理。"
-    else
-        log_warning "清理资源时出现一些问题，但可能不影响使用。"
+    log_warn "此操作将删除所有未使用的镜像、容器和网络"
+    read -p "是否继续？(y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        log_info "正在清理资源..."
+        docker system prune -f
+        log_info "资源清理完成"
     fi
-}
-
-# 检查服务状态
-check_status() {
-    log_info "检查服务状态..."
-    docker-compose -f docker-compose.nginx.yml ps
-}
-
-# 显示帮助信息
-show_help() {
-    echo -e "${BLUE}股票交易系统前端部署脚本${NC}"
-    echo "用法: $0 [命令]"
-    echo ""
-    echo "命令:"
-    echo "  up        启动服务"
-    echo "  down      停止服务"
-    echo "  restart   重启服务"
-    echo "  logs      查看日志"
-    echo "  rebuild   重建并启动服务"
-    echo "  clean     清理资源"
-    echo "  status    检查服务状态"
-    echo "  help      显示此帮助信息"
 }
 
 # 主函数
 main() {
-    # 检查Docker安装
-    check_docker
-    
-    # 检查配置文件
-    check_config_files
-    
-    # 处理命令行参数
+    # 检查参数
+    if [ $# -eq 0 ]; then
+        log_error "缺少参数"
+        echo "用法: $0 {start|stop|restart|status|logs|build|rebuild|clean}"
+        exit 1
+    fi
+
+    # 根据参数执行相应操作
     case "$1" in
-        up)
+        start)
+            check_docker
+            check_config
+            check_port
+            check_synology
             start_service
             ;;
-        down)
+        stop)
+            check_config
             stop_service
             ;;
         restart)
+            check_config
             restart_service
             ;;
+        status)
+            check_config
+            status_service
+            ;;
         logs)
-            view_logs
+            check_config
+            logs_service
+            ;;
+        build)
+            check_docker
+            check_config
+            build_image
             ;;
         rebuild)
+            check_docker
+            check_config
             rebuild_service
             ;;
         clean)
+            check_docker
             clean_resources
             ;;
-        status)
-            check_status
-            ;;
-        help|*)
-            show_help
+        *)
+            log_error "未知参数: $1"
+            echo "用法: $0 {start|stop|restart|status|logs|build|rebuild|clean}"
+            exit 1
             ;;
     esac
 }

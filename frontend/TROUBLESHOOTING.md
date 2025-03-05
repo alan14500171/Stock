@@ -210,83 +210,98 @@ TypeError: crypto$2.getRandomValues is not a function
 
 ### 解决方案
 
-1. **修改 vite.config.mjs 文件**
+1. **使用自定义polyfill**
 
-   在 `vite.config.mjs` 文件中添加以下配置：
-
+   在项目根目录创建`crypto-polyfill.js`文件：
    ```javascript
-   optimizeDeps: {
-     esbuildOptions: {
-       define: {
-         global: 'globalThis'
+   try {
+     const { webcrypto } = require("crypto");
+     global.crypto = webcrypto;
+     console.log("使用Node.js webcrypto作为polyfill");
+   } catch (e) {
+     console.log("无法加载webcrypto，使用自定义随机函数");
+     global.crypto = {
+       getRandomValues: function(buffer) {
+         for (let i = 0; i < buffer.length; i++) {
+           buffer[i] = Math.floor(Math.random() * 256);
+         }
+         return buffer;
        }
-     }
-   },
-   define: {
-     'process.env': {},
-     __VUE_PROD_DEVTOOLS__: false,
-     'process.env.NODE_DEBUG': false,
-     'global': 'window'
+     };
    }
    ```
 
-2. **安装必要的系统依赖**
-
-   在 Dockerfile 中添加以下命令：
-
-   ```dockerfile
-   RUN apk add --no-cache python3 make g++
-   ```
-
-3. **使用 Node.js 16 版本**
-
-   将 Dockerfile 中的基础镜像从 Node.js 18 降级到 Node.js 16：
-
-   ```dockerfile
-   FROM node:16-alpine as build-stage
-   ```
-
-4. **设置 NODE_ENV 环境变量**
-
-   在构建命令中设置 NODE_ENV 环境变量：
-
-   ```dockerfile
-   RUN NODE_ENV=production npm run build
-   ```
-
-5. **安装 crypto-browserify 包**
-
+   然后在构建命令中使用：
    ```bash
-   npm install crypto-browserify --save-dev
+   node -r ./crypto-polyfill.js ./node_modules/vite/bin/vite.js build
    ```
 
-   然后在 `vite.config.mjs` 中添加别名：
+2. **修改vite.config.mjs**
 
+   在`vite.config.mjs`中添加以下配置：
    ```javascript
-   resolve: {
-     alias: {
-       '@': path.resolve(__dirname, './src'),
-       'crypto': 'crypto-browserify'
-     }
+   // 自定义crypto polyfill
+   if (typeof global !== 'undefined' && !global.crypto) {
+     global.crypto = {
+       getRandomValues: function(buffer) {
+         for (let i = 0; i < buffer.length; i++) {
+           buffer[i] = Math.floor(Math.random() * 256);
+         }
+         return buffer;
+       }
+     };
+     console.log('已添加自定义crypto polyfill');
    }
+   
+   export default defineConfig({
+     // ...其他配置
+     resolve: {
+       alias: {
+         'crypto': 'crypto-browserify',
+         'stream': 'stream-browserify',
+         'assert': 'assert',
+         'buffer': 'buffer',
+         'util': 'util'
+       }
+     },
+     optimizeDeps: {
+       include: ['crypto-browserify'],
+       esbuildOptions: {
+         define: {
+           global: "window"
+         }
+       }
+     },
+     define: {
+       'global': 'window',
+       // ...其他定义
+     }
+   })
    ```
 
-6. **清理 node_modules 并重新安装**
+3. **安装必要的polyfill包**
 
    ```bash
-   rm -rf node_modules
-   npm install --legacy-peer-deps
+   npm install --save-dev crypto-browserify stream-browserify assert buffer util
    ```
 
-7. **使用直接路径执行 vite**
+4. **使用Node.js 16版本**
 
-   修改 `package.json` 中的构建脚本：
-
-   ```json
-   "build": "node ./node_modules/vite/bin/vite.js build"
+   Node.js 16版本对crypto模块有更好的支持：
+   ```dockerfile
+   FROM node:16-alpine as build
    ```
 
-以上解决方案可以单独尝试，也可以组合使用。如果问题仍然存在，请检查项目中是否有使用了不兼容的加密库或模块。
+5. **群辉NAS环境特殊处理**
+
+   在群辉NAS的Docker环境中，可能需要额外的配置：
+   - 在`docker-compose.yml`中设置`network_mode: host`
+   - 添加DNS配置：`dns: ["8.8.8.8", "8.8.4.4"]`
+   - 确保Docker容器有足够的内存：`--max-old-space-size=4096`
+
+6. **如果问题持续存在**
+
+   考虑切换到webpack构建工具，它对Node.js polyfill有更好的支持。
 
 ## 联系支持
 

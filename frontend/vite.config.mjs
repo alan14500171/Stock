@@ -2,6 +2,20 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+// 自定义crypto polyfill
+if (typeof global !== 'undefined' && !global.crypto) {
+  global.crypto = {
+    getRandomValues: function(buffer) {
+      for (let i = 0; i < buffer.length; i++) {
+        buffer[i] = Math.floor(Math.random() * 256);
+      }
+      return buffer;
+    }
+  };
+  console.log('已添加自定义crypto polyfill');
+}
+
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
   base: '/',
@@ -31,6 +45,13 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000,
     cssCodeSplit: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true
+      }
+    },
     target: 'es2015',
     reportCompressedSize: false,
     outDir: 'dist',
@@ -44,20 +65,17 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
+    include: ['crypto-browserify'],
     esbuildOptions: {
       define: {
-        global: 'globalThis'
+        global: "window"
       }
-    },
-    include: ['crypto-browserify']
+    }
   },
   define: {
     'process.env': {},
-    __VUE_PROD_DEVTOOLS__: false,
-    'process.env.NODE_DEBUG': false,
+    '__VUE_PROD_DEVTOOLS__': false,
     'global': 'window',
-    'process': {
-      'env': {}
-    }
+    'process.env.NODE_DEBUG': false
   }
 }) 
