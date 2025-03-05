@@ -8,17 +8,20 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 增加Node.js内存限制
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # 复制package.json和package-lock.json
 COPY package*.json ./
 
-# 安装依赖
-RUN npm install
+# 安装依赖，使用--legacy-peer-deps解决潜在的依赖冲突
+RUN npm install --legacy-peer-deps
 
 # 复制所有源代码
 COPY . .
 
-# 构建生产版本
-RUN npm run build
+# 构建生产版本，添加错误处理
+RUN npm run build || (echo "构建失败，查看错误信息" && exit 1)
 
 # 生产阶段
 FROM nginx:stable-alpine as production-stage

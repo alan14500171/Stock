@@ -23,5 +23,12 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src')
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    cssCodeSplit: false,
+    target: 'es2015',
+    reportCompressedSize: false,
+    outDir: 'dist'
   }
 }) 

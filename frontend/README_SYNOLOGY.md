@@ -1,138 +1,161 @@
-# 在群晖NAS上部署股票交易系统前端
+# 股票交易系统前端 - Synology NAS 部署指南
 
-本指南将帮助您在群晖NAS上使用Docker部署股票交易系统的前端部分。
+本文档提供在 Synology NAS 上使用 Docker 部署股票交易系统前端的详细步骤。
 
 ## 前提条件
 
-1. 群晖NAS已安装Docker套件
+1. Synology NAS 已安装 Docker 套件
 2. 后端服务已部署并可访问
-3. 基本的Linux命令行知识
+3. 基本的 Docker 和 Linux 命令知识
 
 ## 部署步骤
 
 ### 1. 准备工作
 
-1. 在群晖NAS上创建一个文件夹用于存放项目文件，例如 `/volume1/docker/stock/frontend`
-2. 将前端项目文件上传到该文件夹
+1. 将前端代码上传到 Synology NAS 的共享文件夹中
+2. 通过 SSH 连接到 Synology NAS
+3. 导航到前端代码所在目录
 
 ### 2. 配置环境变量
 
-1. 编辑 `.env.production` 文件，配置后端API地址：
-   ```
-   VITE_API_BASE_URL=http://192.168.1.100:9099
-   ```
-   请将IP地址替换为您的实际后端服务地址。
+1. 编辑 `.env.production` 文件，设置后端 API 地址：
+
+```
+VITE_API_BASE_URL=http://你的后端IP地址:9099
+VITE_APP_TITLE=股票交易系统
+```
+
+如果文件不存在，启动脚本会自动创建一个默认的配置文件。
 
 ### 3. 选择部署模式
 
-您可以选择以下两种部署模式之一：
+系统支持两种部署模式：
 
-#### 方式一：使用Nginx部署（推荐用于生产环境）
+1. **Nginx 模式**（推荐用于生产环境）
+   - 使用 Nginx 作为 Web 服务器
+   - 更好的性能和安全性
+   - 默认使用 80 端口
 
-1. 确保 `nginx.conf` 文件已正确配置
-2. 使用以下命令启动服务：
-   ```bash
-   chmod +x start.sh
-   ./start.sh start nginx
-   ```
+2. **Node.js 模式**
+   - 使用 Node.js 的 `serve` 工具提供服务
+   - 适合开发和测试
+   - 默认使用 9009 端口
 
-#### 方式二：使用Node.js部署
+### 4. 部署服务
 
-1. 使用以下命令启动服务：
-   ```bash
-   chmod +x start.sh
-   ./start.sh start
-   ```
+使用提供的启动脚本：
 
-### 4. 验证部署
+```bash
+# 设置脚本可执行权限
+chmod +x start.sh
 
-1. 如果使用Nginx模式，访问 `http://您的NAS地址:80`
-2. 如果使用Node.js模式，访问 `http://您的NAS地址:9009`
-3. 使用有效的用户名和密码登录系统
+# Nginx 模式部署（推荐）
+./start.sh start nginx
+
+# 或者 Node.js 模式部署
+./start.sh start node
+```
+
+如果在构建过程中遇到问题，请参考 [部署故障排除指南](TROUBLESHOOTING.md)。
+
+### 5. 验证部署
+
+1. 检查容器是否正常运行：
+
+```bash
+docker ps | grep stock-frontend
+```
+
+2. 在浏览器中访问：
+   - Nginx 模式：`http://你的NAS地址`
+   - Node.js 模式：`http://你的NAS地址:9009`
 
 ## 常见问题排查
 
+### 构建失败
+
+如果在构建过程中遇到 "XSym: not found" 或其他错误，请参考 [部署故障排除指南](TROUBLESHOOTING.md) 中的解决方案。
+
 ### 端口冲突
 
-如果遇到端口冲突，可以修改 `docker-compose.nginx.yml` 或 `docker-compose.yml` 文件中的端口映射：
+如果遇到端口冲突问题：
 
-```yaml
-ports:
-  - "8080:80"  # 将左侧的端口改为其他未使用的端口
-```
+1. 修改 `docker-compose.nginx.yml` 或 `docker-compose.yml` 中的端口映射
+2. 例如，将 `80:80` 改为 `8080:80`
 
 ### 无法连接到后端
 
-1. 确保后端服务正在运行
-2. 检查 `.env.production` 文件中的API地址是否正确
-3. 确保NAS和后端服务器之间的网络连接正常
-4. 检查防火墙设置，确保端口已开放
+1. 确保 `.env.production` 中的 API 地址正确
+2. 检查后端服务是否正常运行
+3. 验证网络连接是否正常
 
-### Nginx配置问题
+更多详细的故障排除步骤，请参考 [部署故障排除指南](TROUBLESHOOTING.md)。
 
-如果使用Nginx模式遇到问题：
-
-1. 检查 `nginx.conf` 文件中的配置是否正确
-2. 确保代理地址指向正确的后端服务
-3. 查看Nginx日志以获取更多信息：
-   ```bash
-   ./start.sh logs nginx
-   ```
-
-## 常用操作
+## 操作命令
 
 ### 查看日志
-```bash
-# Nginx模式
-./start.sh logs nginx
 
-# Node.js模式
-./start.sh logs
+```bash
+./start.sh logs nginx  # Nginx 模式
+./start.sh logs node   # Node.js 模式
 ```
 
 ### 重启服务
-```bash
-# 先停止
-./start.sh stop nginx  # 或 ./start.sh stop
 
-# 再启动
-./start.sh start nginx  # 或 ./start.sh start
+```bash
+./start.sh restart nginx  # Nginx 模式
+./start.sh restart node   # Node.js 模式
 ```
 
 ### 停止服务
-```bash
-# Nginx模式
-./start.sh stop nginx
 
-# Node.js模式
-./start.sh stop
+```bash
+./start.sh stop nginx  # Nginx 模式
+./start.sh stop node   # Node.js 模式
 ```
 
 ### 清理资源
+
 ```bash
-./start.sh clean
+./start.sh clean nginx  # Nginx 模式
+./start.sh clean node   # Node.js 模式
 ```
 
 ## 更新部署
 
-当需要更新前端代码时，请按照以下步骤操作：
+当有新的前端代码上传时：
 
-1. 上传新的代码到NAS
-2. 停止当前服务：
-   ```bash
-   ./start.sh stop nginx  # 或 ./start.sh stop
-   ```
-3. 清理资源：
-   ```bash
-   ./start.sh clean
-   ```
-4. 重新启动服务：
-   ```bash
-   ./start.sh start nginx  # 或 ./start.sh start
-   ```
+1. 停止现有服务：
 
-## 注意事项
+```bash
+./start.sh stop nginx  # 或 node
+```
 
-1. 在生产环境中，建议使用Nginx模式部署，它提供更好的性能和安全性
-2. 定期备份您的配置文件
-3. 保持Docker镜像更新以获取最新的安全补丁 
+2. 清理资源：
+
+```bash
+./start.sh clean nginx  # 或 node
+```
+
+3. 重新启动服务：
+
+```bash
+./start.sh start nginx  # 或 node
+```
+
+## 高级配置
+
+### 自定义 Nginx 配置
+
+如需修改 Nginx 配置，编辑 `nginx.conf` 文件，然后重新构建和部署。
+
+### 自定义端口
+
+如需修改默认端口：
+
+1. 编辑 `docker-compose.nginx.yml` 或 `docker-compose.yml` 文件
+2. 修改 `ports` 部分的端口映射
+
+## 故障排除
+
+如果在部署过程中遇到问题，请参考 [部署故障排除指南](TROUBLESHOOTING.md) 获取详细的解决方案。 
