@@ -21,7 +21,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'crypto': 'crypto-browserify'
+      'crypto': 'crypto-browserify',
+      'stream': 'stream-browserify',
+      'assert': 'assert',
+      'buffer': 'buffer',
+      'util': 'util'
     }
   },
   build: {
@@ -44,12 +48,16 @@ export default defineConfig({
       define: {
         global: 'globalThis'
       }
-    }
+    },
+    include: ['crypto-browserify']
   },
   define: {
     'process.env': {},
     __VUE_PROD_DEVTOOLS__: false,
     'process.env.NODE_DEBUG': false,
-    'global': 'window'
+    'global': 'window',
+    'process': {
+      'env': {}
+    }
   }
 }) 

@@ -1,161 +1,162 @@
-# 股票交易系统前端 - Synology NAS 部署指南
+# 群辉NAS部署指南
 
-本文档提供在 Synology NAS 上使用 Docker 部署股票交易系统前端的详细步骤。
+本指南将帮助您在群辉NAS上部署股票交易系统的前端应用。
 
-## 前提条件
+## 系统要求
 
-1. Synology NAS 已安装 Docker 套件
-2. 后端服务已部署并可访问
-3. 基本的 Docker 和 Linux 命令知识
+- 群辉NAS DSM 6.2或更高版本
+- Docker套件已安装（在套件中心安装）
+- Docker Compose已安装（通常随Docker套件一起安装）
+- 至少2GB可用内存
+- 至少1GB可用存储空间
+
+## 准备工作
+
+1. **启用SSH访问**
+   - 在DSM控制面板中，转到"终端机和SNMP"
+   - 启用SSH服务
+   - 记下您的NAS的IP地址
+
+2. **安装Docker套件**
+   - 在DSM套件中心搜索并安装Docker
+
+3. **创建部署目录**
+   - 通过File Station或SSH创建一个目录用于存放项目文件
+   - 建议路径：`/volume1/docker/stock-frontend`
 
 ## 部署步骤
 
-### 1. 准备工作
+### 1. 上传项目文件
 
-1. 将前端代码上传到 Synology NAS 的共享文件夹中
-2. 通过 SSH 连接到 Synology NAS
-3. 导航到前端代码所在目录
+将以下文件上传到您在NAS上创建的部署目录：
+- `Dockerfile.nginx`
+- `docker-compose.nginx.yml`
+- `nginx.conf`
+- `start.sh`
+- 前端项目源代码
 
-### 2. 配置环境变量
+您可以使用以下方法上传文件：
+- 通过File Station拖放文件
+- 使用SCP命令：`scp -r ./frontend user@nas-ip:/volume1/docker/stock-frontend`
 
-1. 编辑 `.env.production` 文件，设置后端 API 地址：
+### 2. 连接到NAS
 
-```
-VITE_API_BASE_URL=http://你的后端IP地址:9099
-VITE_APP_TITLE=股票交易系统
-```
-
-如果文件不存在，启动脚本会自动创建一个默认的配置文件。
-
-### 3. 选择部署模式
-
-系统支持两种部署模式：
-
-1. **Nginx 模式**（推荐用于生产环境）
-   - 使用 Nginx 作为 Web 服务器
-   - 更好的性能和安全性
-   - 默认使用 80 端口
-
-2. **Node.js 模式**
-   - 使用 Node.js 的 `serve` 工具提供服务
-   - 适合开发和测试
-   - 默认使用 9009 端口
-
-### 4. 部署服务
-
-使用提供的启动脚本：
+通过SSH连接到您的NAS：
 
 ```bash
-# 设置脚本可执行权限
-chmod +x start.sh
-
-# Nginx 模式部署（推荐）
-./start.sh start nginx
-
-# 或者 Node.js 模式部署
-./start.sh start node
+ssh user@nas-ip
 ```
 
-如果在构建过程中遇到问题，请参考 [部署故障排除指南](TROUBLESHOOTING.md)。
-
-### 5. 验证部署
-
-1. 检查容器是否正常运行：
+### 3. 进入项目目录
 
 ```bash
-docker ps | grep stock-frontend
+cd /volume1/docker/stock-frontend
 ```
 
-2. 在浏览器中访问：
-   - Nginx 模式：`http://你的NAS地址`
-   - Node.js 模式：`http://你的NAS地址:9009`
+### 4. 修改配置文件
 
-## 常见问题排查
+1. **编辑docker-compose.nginx.yml**
 
-### 构建失败
+   确保以下配置正确：
+   - 将`VITE_API_BASE_URL`环境变量设置为您的后端API地址
+   - 检查端口映射是否与您的环境冲突
 
-如果在构建过程中遇到 "XSym: not found" 或其他错误，请参考 [部署故障排除指南](TROUBLESHOOTING.md) 中的解决方案。
+   ```bash
+   vi docker-compose.nginx.yml
+   ```
 
-### 端口冲突
+2. **确保start.sh具有执行权限**
 
-如果遇到端口冲突问题：
+   ```bash
+   chmod +x start.sh
+   ```
 
-1. 修改 `docker-compose.nginx.yml` 或 `docker-compose.yml` 中的端口映射
-2. 例如，将 `80:80` 改为 `8080:80`
-
-### 无法连接到后端
-
-1. 确保 `.env.production` 中的 API 地址正确
-2. 检查后端服务是否正常运行
-3. 验证网络连接是否正常
-
-更多详细的故障排除步骤，请参考 [部署故障排除指南](TROUBLESHOOTING.md)。
-
-## 操作命令
-
-### 查看日志
+### 5. 启动应用
 
 ```bash
-./start.sh logs nginx  # Nginx 模式
-./start.sh logs node   # Node.js 模式
+./start.sh up
 ```
 
-### 重启服务
+或者使用Docker Compose命令：
 
 ```bash
-./start.sh restart nginx  # Nginx 模式
-./start.sh restart node   # Node.js 模式
+docker-compose -f docker-compose.nginx.yml up -d
 ```
 
-### 停止服务
+### 6. 验证部署
+
+在浏览器中访问：`http://nas-ip:8080`
+
+## 常见问题解决
+
+### 符号链接问题 (XSym错误)
+
+如果您在构建过程中遇到与符号链接相关的错误，请参考[故障排除指南](TROUBLESHOOTING.md)中的"群辉NAS Docker部署特定问题"部分。
+
+### 权限问题
+
+如果遇到权限问题，可能需要以root用户身份运行命令：
 
 ```bash
-./start.sh stop nginx  # Nginx 模式
-./start.sh stop node   # Node.js 模式
+sudo ./start.sh up
 ```
 
-### 清理资源
+### 网络问题
 
-```bash
-./start.sh clean nginx  # Nginx 模式
-./start.sh clean node   # Node.js 模式
-```
+如果前端无法连接到后端API，请检查：
+1. 后端服务是否正在运行
+2. `VITE_API_BASE_URL`环境变量是否设置正确
+3. NAS防火墙是否允许相关端口的流量
 
-## 更新部署
+## 更新应用
 
-当有新的前端代码上传时：
+要更新应用，请执行以下步骤：
 
-1. 停止现有服务：
+1. 停止当前运行的容器：
+   ```bash
+   ./start.sh down
+   ```
 
-```bash
-./start.sh stop nginx  # 或 node
-```
+2. 拉取最新的代码或替换更新的文件
 
-2. 清理资源：
+3. 重新构建并启动容器：
+   ```bash
+   ./start.sh rebuild
+   ```
 
-```bash
-./start.sh clean nginx  # 或 node
-```
+## 备份配置
 
-3. 重新启动服务：
+建议定期备份以下文件：
+- `docker-compose.nginx.yml`
+- `nginx.conf`
+- 任何自定义配置文件
 
-```bash
-./start.sh start nginx  # 或 node
-```
+您可以使用群辉的Hyper Backup套件创建定期备份任务。
 
-## 高级配置
+## 性能优化
 
-### 自定义 Nginx 配置
+- 如果NAS资源有限，可以在`docker-compose.nginx.yml`中添加资源限制：
+  ```yaml
+  resources:
+    limits:
+      cpus: '0.5'
+      memory: 512M
+  ```
 
-如需修改 Nginx 配置，编辑 `nginx.conf` 文件，然后重新构建和部署。
+- 对于高负载环境，可以增加Nginx的worker进程数量，在`nginx.conf`中修改：
+  ```
+  worker_processes 4;
+  ```
 
-### 自定义端口
+## 安全建议
 
-如需修改默认端口：
+1. 不要使用root用户运行Docker容器
+2. 定期更新DSM和Docker套件
+3. 考虑使用HTTPS而非HTTP
+4. 限制对NAS的SSH访问
 
-1. 编辑 `docker-compose.nginx.yml` 或 `docker-compose.yml` 文件
-2. 修改 `ports` 部分的端口映射
+## 更多资源
 
-## 故障排除
-
-如果在部署过程中遇到问题，请参考 [部署故障排除指南](TROUBLESHOOTING.md) 获取详细的解决方案。 
+- [群辉Docker文档](https://www.synology.com/en-global/knowledgebase/DSM/tutorial/Application/How_to_run_Docker_on_SynologyNAS)
+- [Docker Compose文档](https://docs.docker.com/compose/)
+- [项目故障排除指南](TROUBLESHOOTING.md) 

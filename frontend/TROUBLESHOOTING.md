@@ -295,3 +295,103 @@ TypeError: crypto$2.getRandomValues is not a function
 1. 详细的错误信息和日志
 2. 系统环境信息（操作系统、Docker版本等）
 3. 已尝试的解决方案 
+
+## 群辉NAS Docker部署特定问题
+
+### 问题: 符号链接问题 (XSym错误)
+
+在群辉NAS的Docker环境中，可能会遇到以下错误：
+
+```
+XSym
+0019
+94d8a167e5fc58922c363ccb1c217737
+../vite/bin/vite.js
+```
+
+这是因为群辉NAS的文件系统对符号链接的处理与标准Linux系统不同。
+
+### 解决方案
+
+1. **直接创建执行脚本替代符号链接**
+
+   在Dockerfile中添加以下命令：
+   ```dockerfile
+   RUN echo '#!/usr/bin/env node\nrequire("../vite/bin/vite.js")' > ./node_modules/.bin/vite && \
+       chmod +x ./node_modules/.bin/vite
+   ```
+
+2. **修改package.json中的构建命令**
+
+   将构建命令修改为直接使用vite.js文件：
+   ```json
+   "build": "node ./node_modules/vite/bin/vite.js build"
+   ```
+
+3. **使用Docker卷挂载**
+
+   如果仍然遇到问题，可以尝试使用Docker卷挂载，避免在容器内部处理符号链接：
+   ```yaml
+   volumes:
+     - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+   ```
+
+### 问题: 群辉NAS上的Docker网络问题
+
+在群辉NAS上，Docker容器可能无法正常访问外部网络或其他容器。
+
+### 解决方案
+
+1. **使用host网络模式**
+
+   修改docker-compose.yml文件，使用host网络模式：
+   ```yaml
+   network_mode: "host"
+   ```
+   
+   注意：使用host网络模式时，容器将直接使用宿主机的网络，不需要端口映射。
+
+2. **配置DNS**
+
+   如果容器无法解析域名，可以添加DNS配置：
+   ```yaml
+   dns:
+     - 8.8.8.8
+     - 8.8.4.4
+   ```
+
+3. **检查群辉防火墙设置**
+
+   确保群辉的防火墙允许Docker容器的网络流量。
+
+### 问题: 群辉NAS上的权限问题
+
+群辉NAS上的Docker容器可能遇到文件权限问题。
+
+### 解决方案
+
+1. **设置适当的用户ID**
+
+   在Dockerfile中添加以下命令：
+   ```dockerfile
+   RUN addgroup -g 1000 appgroup && \
+       adduser -D -u 1000 -G appgroup appuser && \
+       chown -R appuser:appgroup /app
+   
+   USER appuser
+   ```
+
+2. **使用root用户运行Nginx**
+
+   在Nginx配置中添加：
+   ```
+   user root;
+   ```
+
+3. **设置卷的权限**
+
+   在docker-compose.yml文件中设置卷的权限：
+   ```yaml
+   volumes:
+     - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+   ``` 

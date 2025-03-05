@@ -1,59 +1,53 @@
 # 构建阶段
-FROM node:16-alpine as build-stage
+FROM node:16-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 设置时区为亚洲/上海
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 增加Node.js内存限制
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+# 设置Node环境变量
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # 安装必要的系统依赖
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ git
 
-# 显示Node.js和npm版本
+# 显示Node和npm版本
 RUN node -v && npm -v
 
 # 复制package.json和package-lock.json
 COPY package*.json ./
 
-# 安装依赖，使用--legacy-peer-deps解决潜在的依赖冲突
+# 安装依赖
 RUN npm install --legacy-peer-deps
-
-# 全局安装vite
-RUN npm install -g vite
 
 # 复制所有源代码
 COPY . .
 
-# 修复vite符号链接
-RUN cd node_modules/.bin && \
-    rm -f vite && \
-    ln -s ../vite/bin/vite.js vite && \
-    chmod +x vite
+# 创建直接执行脚本替代符号链接
+RUN echo '#!/usr/bin/env node\nrequire("../vite/bin/vite.js")' > ./node_modules/.bin/vite && \
+    chmod +x ./node_modules/.bin/vite
 
-# 构建生产版本，使用直接路径执行vite
-RUN node ./node_modules/vite/bin/vite.js build || (echo "构建失败，查看错误信息" && exit 1)
+# 安装所需的polyfill
+RUN npm install --save-dev crypto-browserify stream-browserify assert buffer util
 
-# 生产阶段
-FROM nginx:stable-alpine as production-stage
+# 构建应用
+RUN npm run build || (echo "构建失败，查看错误信息" && exit 1)
 
-# 设置时区为亚洲/上海
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# 使用nginx镜像
+FROM nginx:alpine
 
-# 复制构建好的文件
-COPY --from=build-stage /app/dist /usr/share/nginx/html
-
-# 复制Nginx配置文件
+# 复制nginx配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 暴露端口
+# 从构建阶段复制构建产物
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+
+# 暴露80端口
 EXPOSE 80
 
-# 启动Nginx
+# 启动nginx
 CMD ["nginx", "-g", "daemon off;"] 

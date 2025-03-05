@@ -3,19 +3,41 @@ version: '3'
 services:
   # 前端服务 (Nginx)
   frontend:
+    container_name: stock-frontend-nginx
     build:
       context: .
       dockerfile: Dockerfile.nginx
-    container_name: stock-frontend-nginx
-    restart: always
-    ports:
-      - "80:80"
+    image: stock-frontend-nginx:latest
+    restart: unless-stopped
     environment:
-      - TZ=Asia/Shanghai
       - NODE_ENV=production
-      - VITE_API_BASE_URL=http://后端实际IP地址:9099
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - VITE_API_BASE_URL=http://192.168.1.100:9099  # 替换为您的后端API地址
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     networks:
       - stock-network
+    # 群辉NAS特定配置
+    # 如果遇到网络问题，可以取消注释以下行使用host网络模式
+    # network_mode: "host"
+    # 如果遇到DNS问题，可以取消注释以下行
+    # dns:
+    #   - 8.8.8.8
+    #   - 8.8.4.4
+    # 如果资源有限，可以取消注释以下行限制资源使用
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
 
 networks:
   stock-network:
