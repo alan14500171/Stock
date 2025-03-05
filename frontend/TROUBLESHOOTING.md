@@ -196,6 +196,98 @@ Error response from daemon: driver failed programming external connectivity on e
 
    考虑将静态资源部署到CDN以提高加载速度。
 
+## 构建过程中的 `crypto.getRandomValues is not a function` 错误
+
+### 错误信息
+
+在执行 `npm run build` 命令时，可能会遇到以下错误：
+
+```
+TypeError: crypto$2.getRandomValues is not a function
+```
+
+这个错误通常与 Node.js 的加密模块有关，在 Vite 构建过程中可能会出现。
+
+### 解决方案
+
+1. **修改 vite.config.mjs 文件**
+
+   在 `vite.config.mjs` 文件中添加以下配置：
+
+   ```javascript
+   optimizeDeps: {
+     esbuildOptions: {
+       define: {
+         global: 'globalThis'
+       }
+     }
+   },
+   define: {
+     'process.env': {},
+     __VUE_PROD_DEVTOOLS__: false,
+     'process.env.NODE_DEBUG': false,
+     'global': 'window'
+   }
+   ```
+
+2. **安装必要的系统依赖**
+
+   在 Dockerfile 中添加以下命令：
+
+   ```dockerfile
+   RUN apk add --no-cache python3 make g++
+   ```
+
+3. **使用 Node.js 16 版本**
+
+   将 Dockerfile 中的基础镜像从 Node.js 18 降级到 Node.js 16：
+
+   ```dockerfile
+   FROM node:16-alpine as build-stage
+   ```
+
+4. **设置 NODE_ENV 环境变量**
+
+   在构建命令中设置 NODE_ENV 环境变量：
+
+   ```dockerfile
+   RUN NODE_ENV=production npm run build
+   ```
+
+5. **安装 crypto-browserify 包**
+
+   ```bash
+   npm install crypto-browserify --save-dev
+   ```
+
+   然后在 `vite.config.mjs` 中添加别名：
+
+   ```javascript
+   resolve: {
+     alias: {
+       '@': path.resolve(__dirname, './src'),
+       'crypto': 'crypto-browserify'
+     }
+   }
+   ```
+
+6. **清理 node_modules 并重新安装**
+
+   ```bash
+   rm -rf node_modules
+   npm install --legacy-peer-deps
+   ```
+
+7. **使用直接路径执行 vite**
+
+   修改 `package.json` 中的构建脚本：
+
+   ```json
+   "build": "node ./node_modules/vite/bin/vite.js build"
+   ```
+
+以上解决方案可以单独尝试，也可以组合使用。如果问题仍然存在，请检查项目中是否有使用了不兼容的加密库或模块。
+
 ## 联系支持
 
 如果您在部署过程中遇到无法解决的问题，请联系技术支持团队，并提供以下信息:

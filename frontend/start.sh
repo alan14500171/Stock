@@ -4,7 +4,8 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m' # 无颜色
 
 # 打印状态消息
 print_status() {
@@ -21,321 +22,263 @@ print_error() {
     echo -e "${RED}[错误] $1${NC}"
 }
 
+# 显示帮助信息
+show_help() {
+    echo -e "${BLUE}股票交易系统前端部署脚本${NC}"
+    echo "用法: $0 [选项]"
+    echo ""
+    echo "选项:"
+    echo "  start       启动服务"
+    echo "  stop        停止服务"
+    echo "  restart     重启服务"
+    echo "  status      查看服务状态"
+    echo "  logs        查看服务日志"
+    echo "  build       构建镜像"
+    echo "  clean       清理资源"
+    echo "  nginx       使用Nginx模式部署"
+    echo "  help        显示帮助信息"
+}
+
 # 检查Docker是否安装
 check_docker() {
-    print_status "检查Docker和Docker Compose是否安装..."
-    
     if ! command -v docker &> /dev/null; then
-        print_error "Docker未安装。请先安装Docker。"
-        return 1
+        echo -e "${RED}错误: Docker未安装，请先安装Docker${NC}"
+        exit 1
     fi
     
     if ! command -v docker-compose &> /dev/null; then
-        print_warning "Docker Compose未安装。尝试使用Docker内置的compose命令..."
-        if ! docker compose version &> /dev/null; then
-            print_error "Docker内置的compose命令也不可用。请安装Docker Compose。"
-            return 1
-        fi
+        echo -e "${RED}错误: Docker Compose未安装，请先安装Docker Compose${NC}"
+        exit 1
     fi
-    
-    print_status "Docker和Docker Compose已安装。"
-    return 0
 }
 
 # 检查配置文件
-check_config_files() {
-    print_status "检查必要的配置文件..."
-    
-    # 检查nginx.conf
-    if [ ! -f "nginx.conf" ]; then
-        print_error "nginx.conf文件不存在。"
-        return 1
+check_config() {
+    if [ "$USE_NGINX" = true ]; then
+        if [ ! -f "docker-compose.nginx.yml" ]; then
+            echo -e "${RED}错误: docker-compose.nginx.yml文件不存在${NC}"
+            exit 1
+        fi
+        
+        if [ ! -f "nginx.conf" ]; then
+            echo -e "${RED}错误: nginx.conf文件不存在${NC}"
+            exit 1
+        fi
+        
+        # 检查API地址配置
+        if grep -q "后端实际IP地址" docker-compose.nginx.yml; then
+            echo -e "${YELLOW}警告: 请修改docker-compose.nginx.yml中的后端API地址${NC}"
+        fi
+        
+        if grep -q "后端实际IP地址" nginx.conf; then
+            echo -e "${YELLOW}警告: 请修改nginx.conf中的后端API地址${NC}"
+        fi
+    else
+        if [ ! -f "docker-compose.yml" ]; then
+            echo -e "${RED}错误: docker-compose.yml文件不存在${NC}"
+            exit 1
+        fi
     fi
-    
-    # 检查.env.production
-    if [ ! -f ".env.production" ]; then
-        print_warning ".env.production文件不存在，将创建默认文件。"
-        echo "VITE_API_BASE_URL=http://192.168.1.100:9099" > .env.production
-        echo "VITE_APP_TITLE=股票交易系统" >> .env.production
-        print_status "已创建默认的.env.production文件。"
-    fi
-    
-    print_status "配置文件检查完成。"
-    return 0
 }
 
 # 检查端口占用
 check_port() {
     local port=$1
-    print_status "检查端口 $port 是否被占用..."
-    
-    if command -v lsof &> /dev/null; then
-        if lsof -i :$port -t &> /dev/null; then
-            print_warning "端口 $port 已被占用。"
-            print_warning "您可以在docker-compose文件中修改端口映射，或停止占用该端口的服务。"
+    if command -v netstat &> /dev/null; then
+        if netstat -tuln | grep -q ":$port "; then
+            echo -e "${YELLOW}警告: 端口 $port 已被占用，可能会导致部署失败${NC}"
             return 1
         fi
-    elif command -v netstat &> /dev/null; then
-        if netstat -tuln | grep ":$port " &> /dev/null; then
-            print_warning "端口 $port 已被占用。"
-            print_warning "您可以在docker-compose文件中修改端口映射，或停止占用该端口的服务。"
+    elif command -v ss &> /dev/null; then
+        if ss -tuln | grep -q ":$port "; then
+            echo -e "${YELLOW}警告: 端口 $port 已被占用，可能会导致部署失败${NC}"
             return 1
         fi
-    else
-        print_warning "无法检查端口占用情况，因为lsof和netstat命令都不可用。"
-        print_warning "如果启动失败，可能是端口 $port 已被占用。"
-        return 0
     fi
-    
-    print_status "端口 $port 未被占用。"
     return 0
-}
-
-# 清理Docker资源
-clean_docker_resources() {
-    print_status "清理Docker资源..."
-    
-    # 停止并删除容器
-    if [ "$1" == "nginx" ]; then
-        docker-compose -f docker-compose.nginx.yml down 2>/dev/null || docker compose -f docker-compose.nginx.yml down
-    else
-        docker-compose down 2>/dev/null || docker compose down
-    fi
-    
-    # 删除镜像
-    if [ "$1" == "nginx" ]; then
-        docker rmi stock-frontend-nginx:latest 2>/dev/null
-    else
-        docker rmi stock-frontend:latest 2>/dev/null
-    fi
-    
-    print_status "Docker资源清理完成。"
 }
 
 # 启动服务
 start_service() {
-    local mode=$1
-    print_status "以 $mode 模式启动服务..."
+    echo -e "${BLUE}正在启动服务...${NC}"
+    check_docker
+    check_config
     
-    # 检查配置文件
-    check_config_files || return 1
-    
-    # 检查端口占用
-    if [ "$mode" == "nginx" ]; then
-        check_port 80 || return 1
+    if [ "$USE_NGINX" = true ]; then
+        check_port 80 || echo -e "${YELLOW}继续启动，但可能会失败...${NC}"
+        docker-compose -f docker-compose.nginx.yml up -d
     else
-        check_port 9009 || return 1
+        check_port 9009 || echo -e "${YELLOW}继续启动，但可能会失败...${NC}"
+        docker-compose up -d
     fi
     
-    # 构建并启动服务
-    if [ "$mode" == "nginx" ]; then
-        print_status "使用Nginx模式构建和启动服务..."
-        docker-compose -f docker-compose.nginx.yml build --no-cache || docker compose -f docker-compose.nginx.yml build --no-cache
-        
-        # 检查构建是否成功
-        if [ $? -ne 0 ]; then
-            print_error "Docker构建失败。请检查日志以获取更多信息。"
-            print_status "尝试查看构建日志..."
-            docker logs $(docker ps -a | grep stock-frontend | awk '{print $1}') 2>/dev/null
-            return 1
-        fi
-        
-        docker-compose -f docker-compose.nginx.yml up -d || docker compose -f docker-compose.nginx.yml up -d
-        
-        # 检查启动是否成功
-        if [ $? -ne 0 ]; then
-            print_error "服务启动失败。请检查日志以获取更多信息。"
-            return 1
-        fi
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}服务启动成功!${NC}"
+        show_status
     else
-        print_status "使用Node.js模式构建和启动服务..."
-        docker-compose build --no-cache || docker compose build --no-cache
-        
-        # 检查构建是否成功
-        if [ $? -ne 0 ]; then
-            print_error "Docker构建失败。请检查日志以获取更多信息。"
-            print_status "尝试查看构建日志..."
-            docker logs $(docker ps -a | grep stock-frontend | awk '{print $1}') 2>/dev/null
-            return 1
-        fi
-        
-        docker-compose up -d || docker compose up -d
-        
-        # 检查启动是否成功
-        if [ $? -ne 0 ]; then
-            print_error "服务启动失败。请检查日志以获取更多信息。"
-            return 1
-        fi
+        echo -e "${RED}服务启动失败，请检查日志${NC}"
+        exit 1
     fi
-    
-    # 检查容器是否正在运行
-    if [ "$mode" == "nginx" ]; then
-        if docker ps | grep -q stock-frontend; then
-            print_status "服务已成功启动。"
-            print_status "您可以通过 http://localhost 访问服务。"
-        else
-            print_error "服务启动失败。容器未运行。"
-            print_status "尝试查看容器日志..."
-            docker logs $(docker ps -a | grep stock-frontend | awk '{print $1}') 2>/dev/null
-            return 1
-        fi
-    else
-        if docker ps | grep -q stock-frontend; then
-            print_status "服务已成功启动。"
-            print_status "您可以通过 http://localhost:9009 访问服务。"
-        else
-            print_error "服务启动失败。容器未运行。"
-            print_status "尝试查看容器日志..."
-            docker logs $(docker ps -a | grep stock-frontend | awk '{print $1}') 2>/dev/null
-            return 1
-        fi
-    fi
-    
-    return 0
 }
 
 # 停止服务
 stop_service() {
-    local mode=$1
-    print_status "停止服务..."
+    echo -e "${BLUE}正在停止服务...${NC}"
     
-    if [ "$mode" == "nginx" ]; then
-        docker-compose -f docker-compose.nginx.yml down || docker compose -f docker-compose.nginx.yml down
+    if [ "$USE_NGINX" = true ]; then
+        docker-compose -f docker-compose.nginx.yml down
     else
-        docker-compose down || docker compose down
+        docker-compose down
     fi
     
-    print_status "服务已停止。"
-}
-
-# 查看日志
-view_logs() {
-    local mode=$1
-    print_status "查看服务日志..."
-    
-    if [ "$mode" == "nginx" ]; then
-        docker-compose -f docker-compose.nginx.yml logs -f || docker compose -f docker-compose.nginx.yml logs -f
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}服务已停止${NC}"
     else
-        docker-compose logs -f || docker compose logs -f
+        echo -e "${RED}停止服务失败${NC}"
+        exit 1
     fi
 }
 
-# 显示帮助信息
-show_help() {
-    echo "股票交易系统前端服务管理脚本"
-    echo ""
-    echo "用法: $0 [命令] [模式]"
-    echo ""
-    echo "命令:"
-    echo "  start       启动服务"
-    echo "  stop        停止服务"
-    echo "  restart     重启服务"
-    echo "  logs        查看日志"
-    echo "  clean       清理Docker资源"
-    echo "  help        显示帮助信息"
-    echo ""
-    echo "模式:"
-    echo "  nginx       使用Nginx模式 (默认)"
-    echo "  node        使用Node.js模式"
-    echo ""
-    echo "示例:"
-    echo "  $0 start nginx    以Nginx模式启动服务"
-    echo "  $0 start node     以Node.js模式启动服务"
-    echo "  $0 stop           停止服务"
-    echo "  $0 logs           查看日志"
+# 重启服务
+restart_service() {
+    stop_service
+    start_service
 }
 
-# 检查Node.js和npm版本
-check_node_version() {
-    print_status "检查Node.js和npm版本..."
+# 查看服务状态
+show_status() {
+    echo -e "${BLUE}服务状态:${NC}"
     
-    if command -v node &> /dev/null; then
-        local node_version=$(node -v)
-        print_status "Node.js版本: $node_version"
+    if [ "$USE_NGINX" = true ]; then
+        docker-compose -f docker-compose.nginx.yml ps
     else
-        print_warning "未检测到Node.js。这不会影响Docker部署，但可能影响本地开发。"
-    fi
-    
-    if command -v npm &> /dev/null; then
-        local npm_version=$(npm -v)
-        print_status "npm版本: $npm_version"
-    else
-        print_warning "未检测到npm。这不会影响Docker部署，但可能影响本地开发。"
+        docker-compose ps
     fi
 }
 
-# 诊断构建问题
-diagnose_build_issues() {
-    print_status "诊断构建问题..."
+# 查看服务日志
+show_logs() {
+    echo -e "${BLUE}服务日志:${NC}"
     
-    # 检查package.json是否存在
-    if [ ! -f "package.json" ]; then
-        print_error "package.json文件不存在。请确保您在正确的目录中。"
-        return 1
+    if [ "$USE_NGINX" = true ]; then
+        docker-compose -f docker-compose.nginx.yml logs --tail=100 -f
+    else
+        docker-compose logs --tail=100 -f
+    fi
+}
+
+# 构建镜像
+build_image() {
+    echo -e "${BLUE}正在构建镜像...${NC}"
+    check_docker
+    
+    if [ "$USE_NGINX" = true ]; then
+        docker-compose -f docker-compose.nginx.yml build --no-cache
+    else
+        docker-compose build --no-cache
     fi
     
-    # 检查node_modules是否存在
-    if [ ! -d "node_modules" ]; then
-        print_warning "node_modules目录不存在。这可能表明依赖项尚未安装。"
-        print_status "尝试在本地安装依赖项以验证package.json是否有效..."
-        
-        if command -v npm &> /dev/null; then
-            npm install --legacy-peer-deps
-            if [ $? -ne 0 ]; then
-                print_error "本地依赖项安装失败。package.json可能有问题。"
-                return 1
-            else
-                print_status "本地依赖项安装成功。"
-            fi
-        else
-            print_warning "未检测到npm，无法在本地验证依赖项。"
-        fi
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}镜像构建成功!${NC}"
+    else
+        echo -e "${RED}镜像构建失败${NC}"
+        exit 1
+    fi
+}
+
+# 清理资源
+clean_resources() {
+    echo -e "${BLUE}正在清理资源...${NC}"
+    
+    if [ "$USE_NGINX" = true ]; then
+        docker-compose -f docker-compose.nginx.yml down -v --remove-orphans
+    else
+        docker-compose down -v --remove-orphans
     fi
     
-    # 检查vite.config.js是否存在
-    if [ ! -f "vite.config.mjs" ] && [ ! -f "vite.config.js" ]; then
-        print_error "vite配置文件不存在。请确保vite.config.mjs或vite.config.js文件存在。"
-        return 1
-    fi
+    echo -e "${BLUE}正在清理未使用的镜像和卷...${NC}"
+    docker system prune -f
     
-    print_status "基本文件检查完成。"
-    return 0
+    echo -e "${GREEN}资源清理完成${NC}"
 }
 
 # 主函数
 main() {
-    # 检查Docker是否安装
-    check_docker || exit 1
+    # 默认不使用Nginx
+    USE_NGINX=false
     
-    # 检查Node.js和npm版本
-    check_node_version
+    # 如果没有参数，显示帮助
+    if [ $# -eq 0 ]; then
+        show_help
+        exit 0
+    fi
     
-    # 解析命令行参数
-    local command=${1:-"help"}
-    local mode=${2:-"nginx"}
-    
-    case $command in
+    # 处理参数
+    case "$1" in
         start)
-            # 诊断构建问题
-            diagnose_build_issues
-            
-            start_service $mode
+            start_service
             ;;
         stop)
-            stop_service $mode
+            stop_service
             ;;
         restart)
-            stop_service $mode
-            start_service $mode
+            restart_service
+            ;;
+        status)
+            show_status
             ;;
         logs)
-            view_logs $mode
+            show_logs
+            ;;
+        build)
+            build_image
             ;;
         clean)
-            clean_docker_resources $mode
+            clean_resources
             ;;
-        help|*)
+        nginx)
+            USE_NGINX=true
+            if [ $# -gt 1 ]; then
+                case "$2" in
+                    start)
+                        start_service
+                        ;;
+                    stop)
+                        stop_service
+                        ;;
+                    restart)
+                        restart_service
+                        ;;
+                    status)
+                        show_status
+                        ;;
+                    logs)
+                        show_logs
+                        ;;
+                    build)
+                        build_image
+                        ;;
+                    clean)
+                        clean_resources
+                        ;;
+                    *)
+                        echo -e "${RED}未知选项: $2${NC}"
+                        show_help
+                        exit 1
+                        ;;
+                esac
+            else
+                echo -e "${YELLOW}使用Nginx模式，但未指定操作，默认启动服务${NC}"
+                start_service
+            fi
+            ;;
+        help)
             show_help
+            ;;
+        *)
+            echo -e "${RED}未知选项: $1${NC}"
+            show_help
+            exit 1
             ;;
     esac
 }

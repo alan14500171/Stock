@@ -1,17 +1,22 @@
-version: '3.8'
+version: '3'
 
 services:
   # 前端服务 (Nginx)
-  stock-frontend:
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile.nginx
-    image: stock-frontend-nginx:latest
-    container_name: stock-frontend
+    container_name: stock-frontend-nginx
     restart: always
     ports:
       - "80:80"
     environment:
       - TZ=Asia/Shanghai
-      - NODE_OPTIONS=--max-old-space-size=4096
-    network_mode: "bridge" 
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=http://后端实际IP地址:9099
+    networks:
+      - stock-network
+
+networks:
+  stock-network:
+    driver: bridge 

@@ -6,22 +6,22 @@ export default defineConfig({
   plugins: [vue()],
   base: '/',
   server: {
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     port: 9009,
     strictPort: false,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:9099',
+        target: 'http://localhost:9099',
         changeOrigin: true,
-        secure: false,
-        ws: true
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     },
     cors: true
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src')
+      '@': path.resolve(__dirname, './src'),
+      'crypto': 'crypto-browserify'
     }
   },
   build: {
@@ -29,6 +29,27 @@ export default defineConfig({
     cssCodeSplit: false,
     target: 'es2015',
     reportCompressedSize: false,
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'element-plus': ['element-plus'],
+          'vue': ['vue', 'vue-router', 'vuex']
+        }
+      }
+    }
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
+  },
+  define: {
+    'process.env': {},
+    __VUE_PROD_DEVTOOLS__: false,
+    'process.env.NODE_DEBUG': false,
+    'global': 'window'
   }
 }) 
