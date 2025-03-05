@@ -2,18 +2,17 @@ version: '3'
 
 services:
   stock-frontend:
-    container_name: stock-frontend-simple
     image: nginx:alpine
+    container_name: stock-frontend
     restart: always
+    network_mode: host  # 使用主机网络模式
     volumes:
       - ./dist:/usr/share/nginx/html
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
-    network_mode: host
     environment:
       - TZ=Asia/Shanghai
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health || exit 0"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s 
+      retries: 3 

@@ -70,7 +70,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'element-plus': ['element-plus'],
-          'vue': ['vue', 'vue-router', 'vuex']
+          'vue': ['vue', 'vue-router']
         }
       }
     }
