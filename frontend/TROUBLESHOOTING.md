@@ -18,21 +18,38 @@
 
 这个错误通常是由于Node.js环境中的符号链接问题导致的。以下是几种解决方法:
 
-1. **使用 `--legacy-peer-deps` 安装依赖**
+1. **手动修复符号链接**
+
+   在Dockerfile中添加以下命令来修复vite的符号链接:
+   ```dockerfile
+   RUN cd node_modules/.bin && \
+       rm -f vite && \
+       ln -s ../vite/bin/vite.js vite && \
+       chmod +x vite
+   ```
+
+2. **使用Node.js 16版本**
+
+   将Dockerfile中的Node.js版本从18降级到16:
+   ```dockerfile
+   FROM node:16-alpine
+   ```
+
+3. **使用 `--legacy-peer-deps` 安装依赖**
 
    修改 `Dockerfile` 中的安装命令:
    ```dockerfile
    RUN npm install --legacy-peer-deps
    ```
 
-2. **增加Node.js内存限制**
+4. **增加Node.js内存限制**
 
    在 `Dockerfile` 中添加环境变量:
    ```dockerfile
    ENV NODE_OPTIONS="--max-old-space-size=4096"
    ```
 
-3. **清理并重新构建**
+5. **清理并重新构建**
 
    完全清理Docker资源并重新构建:
    ```bash
@@ -40,15 +57,20 @@
    ./start.sh start
    ```
 
-4. **使用不同的Node.js版本**
+6. **直接安装vite**
 
-   如果问题仍然存在，可以尝试使用不同版本的Node.js基础镜像，例如:
+   在Dockerfile中添加以下命令:
    ```dockerfile
-   FROM node:16-alpine
+   RUN npm install -g vite
    ```
-   或
-   ```dockerfile
-   FROM node:20-alpine
+
+7. **使用npm脚本替代vite命令**
+
+   修改package.json中的build脚本:
+   ```json
+   "scripts": {
+     "build": "node ./node_modules/vite/bin/vite.js build"
+   }
    ```
 
 ## 端口冲突问题

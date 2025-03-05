@@ -15,6 +15,7 @@ services:
       - ./:/app
       - /app/node_modules
     environment:
-      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+      - NODE_OPTIONS=--max-old-space-size=4096
       - VITE_API_BASE_URL=http://192.168.1.100:9099
     network_mode: "bridge" 
