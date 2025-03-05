@@ -1,4 +1,4 @@
-# 群辉NAS专用Dockerfile - 减少拼接命令
+# 群辉NAS专用Dockerfile - 解决XSym问题
 FROM node:16-alpine as build
 
 # 设置环境变量
@@ -15,27 +15,38 @@ RUN apk add --no-cache python3 make g++ git bash
 COPY package*.json ./
 
 # 安装依赖
-RUN npm install --legacy-peer-deps --no-optional && \
-    npm install --save-dev crypto-browserify stream-browserify assert buffer util
+RUN npm install --legacy-peer-deps --no-optional
 
-# 创建crypto-fix.js文件
-COPY ./synology/crypto-fix.js ./
+# 彻底解决XSym问题 - 检测并修复所有符号链接
+RUN find ./node_modules/.bin -type f -exec sh -c "head -n1 {} | grep -q '^#!/' || (rm -f {} && echo '#!/usr/bin/env node' > {} && cat ../\`basename {}\`/bin/\`basename {}\`.js >> {} && chmod +x {})" \; || true
 
-# 创建vite-wrapper.js文件
-COPY ./synology/vite-wrapper.js ./
-
-# 创建自定义vite执行文件
-COPY ./synology/vite ./node_modules/.bin/vite
+# 处理vite符号链接 - 直接创建可执行脚本而非符号链接
+RUN rm -f ./node_modules/.bin/vite
+RUN echo '#!/usr/bin/env node' > ./node_modules/.bin/vite
+RUN echo 'require("../vite/bin/vite.js");' >> ./node_modules/.bin/vite
 RUN chmod +x ./node_modules/.bin/vite
+
+# 创建crypto修复文件
+RUN echo 'const crypto = {' > crypto-fix.js
+RUN echo '  getRandomValues: function(arr) {' >> crypto-fix.js
+RUN echo '    for (let i = 0; i < arr.length; i++) {' >> crypto-fix.js
+RUN echo '      arr[i] = Math.floor(Math.random() * 256);' >> crypto-fix.js
+RUN echo '    }' >> crypto-fix.js
+RUN echo '    return arr;' >> crypto-fix.js
+RUN echo '  }' >> crypto-fix.js
+RUN echo '};' >> crypto-fix.js
+RUN echo 'if (typeof global !== "undefined") global.crypto = crypto;' >> crypto-fix.js
+RUN echo 'if (typeof window !== "undefined") window.crypto = crypto;' >> crypto-fix.js
+RUN echo 'module.exports = crypto;' >> crypto-fix.js
+
+# 在vite.config.mjs中设置全局为globalThis
+RUN sed -i 's/global: "window"/global: "globalThis"/g' vite.config.mjs || true
 
 # 复制源代码
 COPY . .
 
-# 替换crypto-browserify
-RUN cp crypto-fix.js ./node_modules/crypto-browserify/index.js
-
-# 构建应用
-RUN node vite-wrapper.js build --emptyOutDir || echo "构建失败，查看错误信息"
+# 构建应用 - 使用crypto修复和直接调用vite.js
+RUN NODE_ENV=production node -e "global.crypto={getRandomValues:b=>{for(let i=0;i<b.length;i++)b[i]=Math.floor(256*Math.random());return b}}" ./node_modules/vite/bin/vite.js build --emptyOutDir
 
 # 使用nginx镜像
 FROM nginx:alpine
