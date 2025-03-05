@@ -32,15 +32,33 @@ class User:
         try:
             if not self.password_hash:
                 return False
-                
-            if isinstance(password, str):
-                password = password.encode('utf-8')
-                
-            stored_hash = self.password_hash
-            if isinstance(stored_hash, str):
-                stored_hash = stored_hash.encode('utf-8')
-                
-            return bcrypt.checkpw(password, stored_hash)
+            
+            # 检查是否是 Werkzeug 格式的哈希（以 pbkdf2:sha256: 或 sha1$ 等开头）
+            if self.password_hash.startswith(('pbkdf2:', 'sha1$', 'sha256$', 'md5$')):
+                try:
+                    # 使用 Werkzeug 验证
+                    from werkzeug.security import check_password_hash
+                    result = check_password_hash(self.password_hash, password)
+                    
+                    # 如果验证成功，将密码转换为 bcrypt 格式
+                    if result:
+                        logger.info(f"用户 {self.username} 使用 Werkzeug 格式密码验证成功，正在转换为 bcrypt 格式")
+                        self.set_password(password)
+                        self.save()
+                    return result
+                except ValueError as e:
+                    logger.error(f"Werkzeug 密码验证失败: {str(e)}")
+                    return False
+            else:
+                # 使用 bcrypt 验证
+                if isinstance(password, str):
+                    password = password.encode('utf-8')
+                    
+                stored_hash = self.password_hash
+                if isinstance(stored_hash, str):
+                    stored_hash = stored_hash.encode('utf-8')
+                    
+                return bcrypt.checkpw(password, stored_hash)
         except Exception as e:
             logger.error(f"密码验证失败: {str(e)}")
             return False

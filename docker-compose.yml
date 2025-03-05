@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "9099:9099"
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - db
+    command: >
+      bash -c "pip install -r requirements.txt &&
+               python main.py"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=stock
+      - MYSQL_USER=stockuser
+      - MYSQL_PASSWORD=stockpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d
+
+volumes:
+  mysql_data: 
