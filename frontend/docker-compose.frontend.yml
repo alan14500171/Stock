@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # 前端服务
+  stock-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    image: stock-frontend:latest
+    container_name: stock-frontend
+    restart: always
+    # 使用主机网络模式，与后端保持一致
+    network_mode: "host"
+    environment:
+      - TZ=Asia/Shanghai
+    # 添加健康检查
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s 
