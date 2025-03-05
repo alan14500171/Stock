@@ -17,34 +17,6 @@ services:
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
-    depends_on:
-      - stock-db
-    networks:
-      - stock-network
+    network_mode: "bridge"
 
-  # 数据库服务
-  stock-db:
-    image: mysql:8.0
-    container_name: stock-db
-    restart: always
-    environment:
-      - MYSQL_ROOT_PASSWORD=your_root_password
-      - MYSQL_DATABASE=stock
-      - MYSQL_USER=stockuser
-      - MYSQL_PASSWORD=your_password
-    ports:
-      - "3306:3306"
-    volumes:
-      - stock-db-data:/var/lib/mysql
-      - ./init-db:/docker-entrypoint-initdb.d
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    networks:
-      - stock-network
-
-networks:
-  stock-network:
-    driver: bridge
-
-volumes:
-  stock-db-data:
-    driver: local 
+# 不再需要volumes和networks配置 

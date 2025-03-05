@@ -11,17 +11,22 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     default-libmysqlclient-dev \
+    default-mysql-client \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件并安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 创建日志目录
+RUN mkdir -p /app/logs && chmod 777 /app/logs
+
 # 复制应用代码
 COPY . .
 
-# 创建日志目录
-RUN mkdir -p /app/logs && chmod 777 /app/logs
+# 设置启动脚本权限
+RUN chmod +x /app/container_start.sh
 
 # 暴露端口
 EXPOSE 9099
@@ -31,4 +36,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:9099/api/health || exit 1
 
 # 启动应用
-CMD ["python", "main.py"] 
+CMD ["/app/container_start.sh"] 

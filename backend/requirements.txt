@@ -23,7 +23,7 @@ pytz==2024.1
 # 网络相关
 urllib3==1.26.18
 certifi==2024.2.2
-charset-normalizer==3.3.2image.pngimage.pngimage.png
+charset-normalizer==3.3.2
 
 # 安全相关
 MarkupSafe==2.1.5

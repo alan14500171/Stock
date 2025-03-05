@@ -2,6 +2,9 @@
 数据库配置模块示例文件
 请复制此文件为 db_config.py 并修改相应配置
 """
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import os
 from typing import Dict, Any
 
@@ -36,20 +39,38 @@ SQLALCHEMY_CONFIG = {
     }
 }
 
-def get_db_config(env: str = 'development') -> Dict[str, Any]:
-    """获取指定环境的数据库配置"""
-    config = DB_CONFIG.copy()
-    config['database'] = DB_NAMES.get(env, DB_NAMES['development'])
-    return config
+def get_db_config(env: str = 'production') -> Dict[str, Any]:
+    """获取数据库配置"""
+    configs = {
+        'development': {
+            'host': 'localhost',  # 本地开发环境
+            'port': 3306,
+            'user': 'stockuser',
+            'password': 'dev_password',
+            'db': 'stock',
+            'charset': 'utf8mb4'
+        },
+        'production': {
+            'host': '192.168.1.100',  # 替换为您的实际数据库IP地址
+            'port': 3306,
+            'user': 'stockuser',
+            'password': 'your_password',  # 替换为您的实际数据库密码
+            'db': 'stock',
+            'charset': 'utf8mb4'
+        }
+    }
+    return configs.get(env, configs['development'])
 
-def get_sqlalchemy_uri(env: str = 'development') -> str:
-    """获取 SQLAlchemy 数据库 URI"""
-    if env == 'production' and os.environ.get('DATABASE_URL'):
-        return os.environ.get('DATABASE_URL')
-    
+def get_sqlalchemy_uri(env: str = 'production') -> str:
+    """获取SQLAlchemy连接URI"""
     config = get_db_config(env)
-    return f"mysql+pymysql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['database']}"
+    return f"mysql+pymysql://{config['user']}:{config['password']}@{config['host']}:{config['port']}/{config['db']}?charset={config['charset']}"
 
 def get_sqlalchemy_config() -> Dict[str, Any]:
-    """获取 SQLAlchemy 配置"""
-    return SQLALCHEMY_CONFIG 
+    """获取SQLAlchemy配置"""
+    return {
+        'pool_size': 10,
+        'max_overflow': 20,
+        'pool_timeout': 30,
+        'pool_recycle': 1800,
+    } 
