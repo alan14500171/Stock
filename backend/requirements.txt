@@ -36,3 +36,6 @@ beautifulsoup4==4.12.3
 
 # WebSocket支持
 gevent==24.2.1
+
+# 数据库连接池
+DBUtils==3.0.3

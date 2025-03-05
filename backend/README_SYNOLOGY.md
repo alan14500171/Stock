@@ -38,6 +38,8 @@
 docker build -t stock-backend:latest .
 ```
 
+如果在构建过程中遇到 MySQL 客户端安装问题，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md) 中的解决方案。
+
 ### 4. 启动服务
 
 使用提供的启动脚本：
@@ -84,6 +86,8 @@ chmod +x scripts/check_db_connection.py
 python3 scripts/check_db_connection.py
 ```
 
+更详细的故障排除步骤，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md)。
+
 #### 常见数据库问题及解决方案：
 
 1. **数据库名称大小写问题**
@@ -112,7 +116,7 @@ python3 scripts/check_db_connection.py
    ```bash
    # 从容器内部测试连接
    docker exec -it stock-backend ping 数据库IP地址
-   docker exec -it stock-backend mysql -h 数据库IP地址 -u 用户名 -p
+   docker exec -it stock-backend mariadb -h 数据库IP地址 -u 用户名 -p
    ```
 
 4. **数据库服务未运行**
@@ -201,4 +205,8 @@ ports:
 
 ### 持久化数据
 
-如需持久化数据，确保在 `docker-compose.yml` 中配置了适当的卷映射。 
+如需持久化数据，确保在 `docker-compose.yml` 中配置了适当的卷映射。
+
+## 故障排除
+
+如果在部署过程中遇到问题，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md) 获取更详细的解决方案。 

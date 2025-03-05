@@ -5,14 +5,15 @@ WORKDIR /app
 
 # 安装系统依赖和网络诊断工具
 RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
+    build-essential \
+    mariadb-client \
+    libmariadb-dev \
     gcc \
     curl \
     iputils-ping \
     net-tools \
     telnet \
     iproute2 \
-    mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置时区为亚洲/上海

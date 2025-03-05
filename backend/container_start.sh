@@ -47,13 +47,14 @@ RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     echo -e "${YELLOW}尝试连接数据库 (${DB_HOST}:${DB_PORT}) 使用用户 ${DB_USER}...${NC}"
     
-    if mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" --silent &> /dev/null; then
+    # 使用 mariadb 命令替代 mysqladmin
+    if mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SELECT 1;" &> /dev/null; then
         echo -e "${GREEN}数据库连接成功!${NC}"
         break
     else
         # 显示详细的错误信息
         echo -e "${RED}连接失败，错误信息:${NC}"
-        mysqladmin ping -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" 2>&1 || true
+        mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SELECT 1;" 2>&1 || true
     fi
     
     RETRY_COUNT=$((RETRY_COUNT+1))
@@ -64,7 +65,6 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         echo -e "${RED}错误: 无法连接到数据库 $DB_HOST:$DB_PORT${NC}"
         echo -e "${YELLOW}请检查数据库配置和网络连接${NC}"
         echo -e "${YELLOW}尝试使用 telnet 测试端口连接:${NC}"
-        apt-get update && apt-get install -y telnet &> /dev/null
         telnet $DB_HOST $DB_PORT || echo -e "${RED}telnet 连接失败${NC}"
         exit 1
     fi
@@ -75,11 +75,11 @@ echo -e "${YELLOW}检查数据库 '$DB_NAME' 是否存在...${NC}"
 
 # 尝试列出所有数据库
 echo -e "${YELLOW}尝试列出所有数据库:${NC}"
-DATABASES=$(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SHOW DATABASES;" 2>/dev/null)
+DATABASES=$(mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SHOW DATABASES;" 2>/dev/null)
 if [ $? -ne 0 ]; then
     echo -e "${RED}无法列出数据库，可能是权限问题${NC}"
-    echo -e "${YELLOW}尝试直接连接MySQL服务器:${NC}"
-    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SELECT VERSION();" || echo -e "${RED}无法连接到MySQL服务器${NC}"
+    echo -e "${YELLOW}尝试直接连接数据库服务器:${NC}"
+    mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SELECT VERSION();" || echo -e "${RED}无法连接到数据库服务器${NC}"
 else
     echo "$DATABASES"
     
@@ -111,7 +111,7 @@ else
 fi
 
 # 尝试使用数据库
-if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE \`$DB_NAME\`;" &> /dev/null; then
+if ! mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE \`$DB_NAME\`;" &> /dev/null; then
     echo -e "${RED}错误: 无法使用数据库 '$DB_NAME'${NC}"
     echo -e "${YELLOW}可能的原因:${NC}"
     echo -e "1. 数据库 '$DB_NAME' 不存在"
@@ -120,7 +120,7 @@ if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE \`$DB_
     
     # 尝试创建数据库
     echo -e "${YELLOW}尝试创建数据库 '$DB_NAME':${NC}"
-    if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" &> /dev/null; then
+    if mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" &> /dev/null; then
         echo -e "${GREEN}成功创建数据库 '$DB_NAME'${NC}"
     else
         echo -e "${RED}无法创建数据库，可能没有足够权限${NC}"
@@ -132,7 +132,7 @@ else
     
     # 检查数据库中是否有表
     echo -e "${YELLOW}检查数据库中的表:${NC}"
-    TABLES=$(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE \`$DB_NAME\`; SHOW TABLES;" 2>/dev/null)
+    TABLES=$(mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE \`$DB_NAME\`; SHOW TABLES;" 2>/dev/null)
     if [ -z "$TABLES" ] || [ $(echo "$TABLES" | wc -l) -le 1 ]; then
         echo -e "${YELLOW}数据库 '$DB_NAME' 中没有表或无法查看表${NC}"
     else
@@ -145,7 +145,7 @@ echo -e "${GREEN}数据库检查完成!${NC}"
 
 # 检查用户权限
 echo -e "${YELLOW}检查用户权限:${NC}"
-GRANTS=$(mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SHOW GRANTS FOR CURRENT_USER();" 2>/dev/null)
+GRANTS=$(mariadb -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" -e "SHOW GRANTS FOR CURRENT_USER();" 2>/dev/null)
 if [ $? -eq 0 ]; then
     echo "$GRANTS"
     

@@ -81,6 +81,8 @@ python app.py
 docker-compose up -d
 ```
 
+如果在构建过程中遇到问题，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md)。
+
 ### 使用启动脚本
 
 提供了便捷的启动脚本，可以执行各种操作：
@@ -123,6 +125,8 @@ python scripts/check_db_connection.py
 - 数据库服务可访问性
 - 数据库名称（包括大小写问题）
 - 用户权限
+
+更详细的故障排除步骤，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md)。
 
 ### 2. 常见数据库问题及解决方案
 
@@ -195,6 +199,10 @@ http://localhost:9099/api/docs
 ## 群辉NAS部署
 
 如需在群辉NAS上部署，请参考 [群辉NAS部署指南](README_SYNOLOGY.md)。
+
+## 故障排除
+
+如果在部署或使用过程中遇到问题，请参考 [部署故障排除指南](DEPLOYMENT_TROUBLESHOOTING.md) 获取详细的解决方案。
 
 ## 许可证
 
