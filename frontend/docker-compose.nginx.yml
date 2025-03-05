@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  # 前端服务 (Nginx)
+  stock-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: stock-frontend-nginx:latest
+    container_name: stock-frontend
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - TZ=Asia/Shanghai
+    network_mode: "bridge" 

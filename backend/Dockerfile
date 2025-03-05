@@ -1,22 +1,28 @@
-FROM python:3.12-slim
+FROM python:3.9-slim
 
 # 设置工作目录
 WORKDIR /app
+
+# 安装系统依赖和网络诊断工具
+RUN apt-get update && apt-get install -y \
+    default-libmysqlclient-dev \
+    gcc \
+    curl \
+    iputils-ping \
+    net-tools \
+    telnet \
+    iproute2 \
+    mysql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置时区为亚洲/上海
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 安装基础工具
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    default-libmysqlclient-dev \
-    default-mysql-client \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# 复制依赖文件并安装依赖
+# 复制依赖文件
 COPY requirements.txt .
+
+# 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 创建日志目录

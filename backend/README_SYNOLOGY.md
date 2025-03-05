@@ -167,11 +167,64 @@ http://your-nas-ip:9099
 
 ### 数据库连接问题
 
-如果应用无法连接到数据库，请检查：
+如果您遇到数据库连接问题，请检查以下几点：
 
-1. `docker-compose.yml`中的数据库配置
-2. `config/db_config.py`中的连接信息
-3. 确保两者的用户名、密码、数据库名称一致
+1. **确认数据库配置正确**
+   - 打开 `backend/config/db_config.py` 文件
+   - 确保 `production` 环境中的数据库连接信息正确：
+     - `host`: 数据库服务器的实际 IP 地址（不是 `127.0.0.1`，在 Docker 中这指向容器内部）
+     - `port`: MySQL 默认端口是 3306
+     - `user` 和 `password`: 确保使用有权限访问数据库的用户
+     - `db`: 确保数据库名称正确且已创建
+
+2. **检查网络连接**
+   - 确保 Docker 容器可以访问数据库服务器
+   - 在 Synology NAS 上，确保 Docker 网络设置为"桥接"模式
+   - 检查防火墙设置，确保允许 MySQL 端口 (3306) 的流量
+
+3. **验证数据库服务**
+   - 确保 MySQL 服务正在运行
+   - 使用以下命令测试连接（替换为您的实际值）：
+     ```bash
+     mysql -h 数据库IP -P 3306 -u 用户名 -p
+     ```
+
+4. **查看详细日志**
+   - 使用以下命令查看容器日志：
+     ```bash
+     docker logs stock-backend
+     ```
+
+5. **手动测试数据库连接**
+   - 进入容器内部：
+     ```bash
+     docker exec -it stock-backend bash
+     ```
+   - 测试数据库连接：
+     ```bash
+     mysqladmin ping -h 数据库IP -P 3306 -u 用户名 -p密码
+     ```
+
+### 常见错误解决方案
+
+1. **"数据库 'stock' 不存在"**
+   - 连接到 MySQL 并创建数据库：
+     ```sql
+     CREATE DATABASE stock CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+     ```
+
+2. **"无法连接到数据库"**
+   - 检查 IP 地址是否正确
+   - 确保数据库用户有远程访问权限：
+     ```sql
+     CREATE USER 'stockuser'@'%' IDENTIFIED BY '密码';
+     GRANT ALL PRIVILEGES ON stock.* TO 'stockuser'@'%';
+     FLUSH PRIVILEGES;
+     ```
+
+3. **"Access denied for user"**
+   - 确认用户名和密码正确
+   - 确保用户有适当的权限
 
 ### 端口冲突
 
