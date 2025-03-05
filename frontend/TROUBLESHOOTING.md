@@ -409,4 +409,121 @@ XSym
    ```yaml
    volumes:
      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-   ``` 
+   ```
+
+## 群辉NAS特定XSym和crypto错误解决方案
+
+### 问题描述
+
+在群辉NAS上使用Docker部署时，可能会遇到以下两类典型错误：
+
+1. **XSym符号链接错误**：
+
+```
+#15 3.399 XSym
+#15 3.399 0019
+#15 3.399 94d8a167e5fc58922c363ccb1c217737
+#15 3.399 ../vite/bin/vite.js
+```
+
+2. **Crypto模块错误**：
+
+```
+#17 5.882 TypeError: crypto$2.getRandomValues is not a function
+#17 5.895 构建失败，查看错误信息
+```
+
+这两个错误经常同时出现，它们的原因如下：
+
+- **XSym错误**：群辉NAS的Docker环境对符号链接支持不完善，无法正确解析node_modules/.bin中的符号链接。
+- **Crypto错误**：Node.js环境中的crypto模块与Vite构建时期望的浏览器crypto API不兼容。
+
+### 完整解决方案
+
+#### 方法一：使用强化版Dockerfile（推荐）
+
+我们已经创建了一个专为群辉NAS优化的Dockerfile，它结合以下多种技术解决了这些问题：
+
+1. 创建直接执行脚本替代符号链接
+2. 提供多种备选的crypto polyfill实现方式
+3. 使用多种构建方法尝试，确保至少一种能成功
+
+使用以下步骤：
+
+1. 确保已更新所有配置文件：`Dockerfile.nginx`、`vite.config.mjs`和`package.json`
+2. 使用`./start.sh rebuild`命令重新构建并启动服务
+
+#### 方法二：直接修改构建命令
+
+如果方法一仍然不成功，您可以尝试手动执行以下命令：
+
+```bash
+# 进入容器
+docker exec -it stock-frontend-nginx /bin/sh
+
+# 创建crypto polyfill
+cat > crypto-polyfill.js << 'EOL'
+const crypto = {};
+crypto.getRandomValues = function(arr) {
+  for (let i = 0; i < arr.length; i++) {
+    arr[i] = Math.floor(Math.random() * 256);
+  }
+  return arr;
+};
+module.exports = crypto;
+EOL
+
+# 替换crypto-browserify
+cp crypto-polyfill.js ./node_modules/crypto-browserify/index.js
+
+# 使用内联polyfill执行构建
+node -e "global.crypto={getRandomValues:b=>{for(let i=0;i<b.length;i++)b[i]=Math.floor(256*Math.random());return b}}" ./node_modules/vite/bin/vite.js build
+```
+
+#### 方法三：使用预构建的项目
+
+为了避免在群辉NAS上构建过程中的问题，您也可以考虑在本地构建项目，然后将构建结果（dist目录）上传到NAS：
+
+1. 在本地开发机器上执行构建：
+   ```bash
+   npm run build
+   ```
+
+2. 创建只复制构建结果的简化Dockerfile：
+   ```dockerfile
+   FROM nginx:alpine
+   COPY dist /usr/share/nginx/html
+   COPY nginx.conf /etc/nginx/conf.d/default.conf
+   EXPOSE 80
+   CMD ["nginx", "-g", "daemon off;"]
+   ```
+
+3. 使用这个简化版Dockerfile在NAS上构建镜像
+
+### 调试技巧
+
+当遇到群辉NAS特有的构建问题时，以下调试技巧可能有用：
+
+1. **查看构建过程的详细日志**：
+   ```bash
+   docker-compose -f docker-compose.nginx.yml build --no-cache --progress=plain
+   ```
+
+2. **进入构建失败的容器检查环境**：
+   ```bash
+   docker commit $(docker ps -a | grep stock-frontend | awk '{print $1}') debug-image
+   docker run -it --rm debug-image /bin/sh
+   ```
+
+3. **检查node_modules/.bin中的符号链接**：
+   ```bash
+   ls -la node_modules/.bin
+   file node_modules/.bin/vite
+   ```
+
+4. **手动测试crypto polyfill**：
+   ```bash
+   node -e "console.log(typeof global.crypto?.getRandomValues === 'function')"
+   ```
+
+我们希望以上解决方案能帮助您解决群辉NAS环境中遇到的部署问题。如果仍然存在问题，请参考完整的故障排除指南或联系技术支持。 

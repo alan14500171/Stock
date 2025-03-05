@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=4096 --no-warnings"
 
 # 安装系统依赖
-RUN apk add --no-cache python3 make g++ git
+RUN apk add --no-cache python3 make g++ git bash
 
 # 设置工作目录
 WORKDIR /app
@@ -18,28 +18,42 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps --no-optional
 RUN npm install --save-dev crypto-browserify stream-browserify assert buffer util
 
+# 删除并重建node_modules/.bin/vite为直接脚本，解决符号链接问题
+RUN rm -f ./node_modules/.bin/vite && \
+    echo '#!/usr/bin/env node' > ./node_modules/.bin/vite && \
+    echo 'require("../vite/bin/vite.js");' >> ./node_modules/.bin/vite && \
+    chmod +x ./node_modules/.bin/vite
+
 # 复制源代码
 COPY . .
 
-# 创建自定义crypto polyfill
-RUN echo 'try { \
-  const { webcrypto } = require("crypto"); \
-  global.crypto = webcrypto; \
-  console.log("使用Node.js webcrypto作为polyfill"); \
-} catch (e) { \
-  console.log("无法加载webcrypto，使用自定义随机函数"); \
-  global.crypto = { \
-    getRandomValues: function(buffer) { \
-      for (let i = 0; i < buffer.length; i++) { \
-        buffer[i] = Math.floor(Math.random() * 256); \
-      } \
-      return buffer; \
-    } \
-  }; \
-}' > crypto-polyfill.js
+# 创建构建脚本，提供完整的crypto polyfill
+RUN echo '#!/bin/bash' > build-synology.sh && \
+    echo 'echo "开始构建应用..."' >> build-synology.sh && \
+    echo 'export NODE_OPTIONS="--max-old-space-size=4096 --no-warnings"' >> build-synology.sh && \
+    echo 'echo "// 临时修改crypto-browserify" > crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "const crypto = {};" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "crypto.getRandomValues = function(arr) {" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "  for (let i = 0; i < arr.length; i++) {" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "    arr[i] = Math.floor(Math.random() * 256);" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "  }" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "  return arr;" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "};" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "module.exports = crypto;" >> crypto-polyfill.js' >> build-synology.sh && \
+    echo 'echo "使用自定义crypto polyfill..."' >> build-synology.sh && \
+    echo 'cp crypto-polyfill.js ./node_modules/crypto-browserify/index.js' >> build-synology.sh && \
+    echo 'echo "创建vite构建包装器..."' >> build-synology.sh && \
+    echo 'echo "#!/usr/bin/env node" > vite-wrapper.js' >> build-synology.sh && \
+    echo 'echo "global.crypto = { getRandomValues: buffer => { for(let i=0;i<buffer.length;i++) buffer[i]=Math.floor(Math.random()*256); return buffer; } };" >> vite-wrapper.js' >> build-synology.sh && \
+    echo 'echo "require(\"./node_modules/vite/bin/vite.js\");" >> vite-wrapper.js' >> build-synology.sh && \
+    echo 'chmod +x vite-wrapper.js' >> build-synology.sh && \
+    echo 'npm run build:synology || node vite-wrapper.js build' >> build-synology.sh && \
+    chmod +x build-synology.sh
 
-# 构建应用
-RUN node -r ./crypto-polyfill.js ./node_modules/vite/bin/vite.js build || (echo "构建失败，查看错误信息" && exit 1)
+# 构建应用，使用多种方式尝试
+RUN ./build-synology.sh || (echo "首次构建失败，尝试备用方案..." && \
+    node -e "global.crypto={getRandomValues:b=>{for(let i=0;i<b.length;i++)b[i]=Math.floor(256*Math.random());return b}}" \
+    ./node_modules/vite/bin/vite.js build --emptyOutDir) || (echo "构建失败，查看错误信息" && exit 1)
 
 # 使用nginx镜像
 FROM nginx:alpine

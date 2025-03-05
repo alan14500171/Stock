@@ -2,17 +2,28 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
-// 自定义crypto polyfill
-if (typeof global !== 'undefined' && !global.crypto) {
-  global.crypto = {
-    getRandomValues: function(buffer) {
-      for (let i = 0; i < buffer.length; i++) {
-        buffer[i] = Math.floor(Math.random() * 256);
-      }
-      return buffer;
+// 直接使用同步方式创建随机值
+if (typeof window === 'undefined') {
+  const getRandomValues = function(arr) {
+    for (let i = 0; i < arr.length; i++) {
+      arr[i] = Math.floor(Math.random() * 256);
     }
+    return arr;
   };
-  console.log('已添加自定义crypto polyfill');
+  
+  // NodeJS环境下全局定义
+  if (typeof global !== 'undefined') {
+    if (!global.crypto) {
+      global.crypto = { getRandomValues };
+      console.log('已为NodeJS环境添加全局crypto.getRandomValues polyfill');
+    }
+  }
+  
+  // 浏览器环境下全局定义
+  if (typeof window !== 'undefined' && !window.crypto) {
+    window.crypto = { getRandomValues };
+    console.log('已为浏览器环境添加全局crypto.getRandomValues polyfill');
+  }
 }
 
 // https://vitejs.dev/config/
@@ -65,17 +76,21 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['crypto-browserify'],
+    include: [
+      'crypto-browserify',
+      'buffer',
+      'stream-browserify'
+    ],
     esbuildOptions: {
       define: {
-        global: "window"
+        global: 'globalThis'
       }
     }
   },
   define: {
     'process.env': {},
     '__VUE_PROD_DEVTOOLS__': false,
-    'global': 'window',
+    'global': 'globalThis',
     'process.env.NODE_DEBUG': false
   }
 }) 

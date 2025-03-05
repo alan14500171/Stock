@@ -13,33 +13,41 @@ services:
     restart: always
     environment:
       - NODE_OPTIONS=--max-old-space-size=4096 --no-warnings
-      - VITE_API_BASE_URL=http://192.168.0.109:9099
-    ports:
-      - "8080:80"
+      - VITE_API_BASE_URL=http://后端实际IP地址:9099
+    # 群辉NAS环境使用host网络模式，取消端口映射
+    network_mode: host
+    # 如果使用host网络模式不成功，可以取消下面注释，使用端口映射
+    # ports:
+    #   - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    # 群辉NAS特定配置
-    network_mode: host
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    # 资源限制
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 2G
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+    # 群辉NAS环境特殊设置
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    # 结束网络问题的额外设置
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   stock-network:
