@@ -1,13 +1,34 @@
 FROM python:3.12-slim
 
+# 设置工作目录
 WORKDIR /app
 
-COPY requirements.txt .
+# 设置时区为亚洲/上海
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 安装基础工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件并安装依赖
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 复制应用代码
 COPY . .
 
+# 创建日志目录
+RUN mkdir -p /app/logs && chmod 777 /app/logs
+
+# 暴露端口
 EXPOSE 9099
 
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:9099/api/health || exit 1
+
+# 启动应用
 CMD ["python", "main.py"] 
