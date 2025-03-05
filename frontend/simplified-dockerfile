@@ -1,0 +1,23 @@
+# 群辉NAS简化部署Dockerfile
+# 使用这个Dockerfile时，需要先在本地机器构建好dist目录，再上传到NAS
+
+FROM nginx:alpine
+
+# 设置工作目录
+WORKDIR /usr/share/nginx/html
+
+# 复制已构建好的静态文件
+COPY ./dist/ .
+
+# 复制nginx配置
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+
+# 添加健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -q --spider http://localhost:80/health || exit 1
+
+# 暴露端口
+EXPOSE 80
+
+# 启动nginx
+CMD ["nginx", "-g", "daemon off;"] 
