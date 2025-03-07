@@ -21,6 +21,10 @@ const service = axios.create({
 // 请求拦截器
 service.interceptors.request.use(
     config => {
+        // 确保URL使用完整路径
+        if (!config.url.startsWith('http')) {
+            config.url = `${apiBaseUrl}${config.url}`
+        }
         console.log('发送请求 (request.js):', config.url, config)
         
         // 添加CORS相关头
