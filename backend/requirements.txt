@@ -1,6 +1,3 @@
-# Python版本要求
-python_version >= "3.12"
-
 # Web框架和扩展
 Flask==3.0.3
 Flask-CORS==4.0.0
