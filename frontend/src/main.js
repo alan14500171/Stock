@@ -17,6 +17,10 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 import './assets/main.css'
 import permissionDirective from './directives/permission'
 
+// 导入 Toast 插件
+import Toast from 'vue-toastification'
+import 'vue-toastification/dist/index.css'
+
 // 将Bootstrap挂载到window对象
 window.bootstrap = bootstrap
 
@@ -110,6 +114,22 @@ const app = createApp(App)
 // 注册Element Plus
 app.use(ElementPlus, {
   locale: zhCn,
+})
+
+// 注册 Toast 插件
+app.use(Toast, {
+  position: 'top-right',
+  timeout: 3000,
+  closeOnClick: true,
+  pauseOnFocusLoss: true,
+  pauseOnHover: true,
+  draggable: true,
+  draggablePercent: 0.6,
+  showCloseButtonOnHover: false,
+  hideProgressBar: true,
+  closeButton: 'button',
+  icon: true,
+  rtl: false
 })
 
 // 注册全局属性

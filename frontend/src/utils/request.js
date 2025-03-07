@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import { toast } from 'vue-toastification'
+import { useToast } from 'vue-toastification'
 
 // 创建axios实例
 const service = axios.create({
@@ -54,6 +54,8 @@ service.interceptors.response.use(
     },
     error => {
         console.error('响应错误 (request.js):', error)
+        const toast = useToast()
+        
         if (error.response) {
             console.error('错误状态码:', error.response.status)
             console.error('错误数据:', error.response.data)
