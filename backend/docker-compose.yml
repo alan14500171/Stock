@@ -4,17 +4,17 @@ services:
   # 后端服务
   stock-backend:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: stock-backend:latest
     container_name: stock-backend
     restart: unless-stopped
     ports:
       - "9099:9099"
     volumes:
-      - ../:/app
-      - /volume1/docker/stock/logs:/app/logs
-      - /volume1/docker/stock/config:/app/config
+      - .:/app
+      - ./logs:/app/logs
+      - ./config:/app/config
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
