@@ -31,19 +31,21 @@ COPY requirements.txt .
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 创建日志目录
-RUN mkdir -p /app/logs && chmod 777 /app/logs
+# 创建必要的目录
+RUN mkdir -p /app/logs && \
+    mkdir -p /app/config && \
+    chmod 777 /app/logs
 
 # 复制应用代码
 COPY . .
 
-# 设置启动脚本权限
+# 确保脚本可执行
 RUN chmod +x /app/container_start.sh
 
 # 暴露端口
 EXPOSE 9099
 
-# 健康检查 - 增加重试和超时时间
+# 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:9099/api/health || exit 1
 

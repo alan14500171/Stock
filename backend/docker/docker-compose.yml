@@ -4,16 +4,17 @@ services:
   # 后端服务
   stock-backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     image: stock-backend:latest
     container_name: stock-backend
     restart: unless-stopped
     ports:
       - "9099:9099"
     volumes:
-      - ./logs:/app/logs
-      - ./config:/app/config
+      - ../:/app
+      - /volume1/docker/stock/logs:/app/logs
+      - /volume1/docker/stock/config:/app/config
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
@@ -21,8 +22,8 @@ services:
       - DB_CONNECT_RETRY=5
       - DB_CONNECT_TIMEOUT=10
       - DB_CONNECT_RETRY_DELAY=3
-    # 使用主机网络模式，直接使用宿主机网络，解决网络隔离问题
-    network_mode: "host"
+    networks:
+      - stock-network
     # 添加健康检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9099/api/health"]
@@ -32,5 +33,14 @@ services:
       start_period: 30s
     # 只保留内存限制，移除CPU限制
     mem_limit: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  stock-network:
+    driver: bridge
 
 # 不再需要volumes和networks配置 

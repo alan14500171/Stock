@@ -19,14 +19,30 @@ if [ ! -d "/app/logs" ]; then
     echo -e "${GREEN}✓ 日志目录已创建${NC}"
 fi
 
+# 检查配置目录
+if [ ! -d "/app/config" ]; then
+    echo -e "${YELLOW}创建配置目录...${NC}"
+    mkdir -p /app/config
+    chmod 755 /app/config
+    echo -e "${GREEN}✓ 配置目录已创建${NC}"
+fi
+
+# 检查配置文件
+if [ ! -f "/app/config/db_config.py" ]; then
+    echo -e "${YELLOW}创建数据库配置文件...${NC}"
+    cp /app/config/db_config.example.py /app/config/db_config.py
+    chmod 644 /app/config/db_config.py
+    echo -e "${GREEN}✓ 配置文件已创建${NC}"
+fi
+
 # 数据库连接参数
-DB_HOST="172.16.0.109"
-DB_PORT=3306
-DB_USER="root"
-DB_PASS="Zxc000123"
-DB_NAME="stock"
-MAX_RETRIES=10
-RETRY_DELAY=5
+DB_HOST=${DB_HOST:-"219.92.22.148"}
+DB_PORT=${DB_PORT:-3306}
+DB_USER=${DB_USER:-"root"}
+DB_PASS=${DB_PASS:-"Zxc000123"}
+DB_NAME=${DB_NAME:-"stock"}
+MAX_RETRIES=${DB_CONNECT_RETRY:-10}
+RETRY_DELAY=${DB_CONNECT_RETRY_DELAY:-5}
 
 # 测试数据库连接函数
 test_db_connection() {
