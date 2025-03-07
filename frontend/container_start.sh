@@ -36,7 +36,7 @@ if [ ! -f "/app/config/db_config.py" ]; then
 fi
 
 # 数据库连接参数
-DB_HOST=${DB_HOST:-"219.92.22.148"}
+DB_HOST=${DB_HOST:-"192.168.0.109"}
 DB_PORT=${DB_PORT:-3306}
 DB_USER=${DB_USER:-"root"}
 DB_PASS=${DB_PASS:-"Zxc000123"}
