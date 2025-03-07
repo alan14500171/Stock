@@ -1,0 +1,44 @@
+# Web框架和扩展
+Flask==3.0.3
+Flask-CORS==4.0.0
+Werkzeug==3.0.1
+requests==2.31.0
+python-dotenv==1.0.0
+
+# 数据库
+pymysql==1.1.0
+cryptography==42.0.5
+SQLAlchemy==2.0.38
+
+# 工具库
+bcrypt==4.1.2
+
+# 数据处理
+pandas>=2.2.0
+numpy>=1.26.0
+
+# 时间处理
+pytz==2024.1
+
+# 网络相关
+urllib3==1.26.18
+certifi==2024.2.2
+charset-normalizer==3.3.2
+
+# 安全相关
+MarkupSafe==2.1.5
+
+# 其他
+click==8.1.7
+
+# HTML解析
+beautifulsoup4==4.12.3
+
+# WebSocket支持
+gevent==24.2.1
+
+# 数据库连接池
+DBUtils==3.0.3
+
+# 控制台颜色输出
+colorama==0.4.6

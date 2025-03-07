@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "9099:9099"
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Shanghai
+    network_mode: "host"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    mem_limit: 1G
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ./docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "9009:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html
+      - ./frontend/docker/nginx.conf:/etc/nginx/conf.d/default.conf
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - backend
+    network_mode: "host"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: 512M
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=stock
+      - MYSQL_USER=stockuser
+      - MYSQL_PASSWORD=stockpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/docker/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
+    mem_limit: 512M
+
+volumes:
+  mysql_data:
