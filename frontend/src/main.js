@@ -56,12 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // 配置axios
-const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
-console.log('API Base URL (main.js):', apiBaseUrl)
-
-// 创建axios实例
 const axiosInstance = axios.create({
-  baseURL: apiBaseUrl,
+  baseURL: 'http://192.168.0.109:9099',
   timeout: 15000,
   withCredentials: true,
   headers: {
@@ -72,18 +68,18 @@ const axiosInstance = axios.create({
 
 // 请求拦截器
 axiosInstance.interceptors.request.use(config => {
-  console.log('发送请求 (main.js):', config.url, config)
+  console.log('发送请求 (main.js):', {
+    method: config.method,
+    baseURL: config.baseURL,
+    url: config.url,
+    fullPath: `${config.baseURL}${config.url}`,
+    headers: config.headers
+  })
   
   // 从localStorage获取token
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
-  }
-  
-  // 添加CSRF token
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-  if (csrfToken) {
-    config.headers['X-CSRF-TOKEN'] = csrfToken
   }
   
   return config

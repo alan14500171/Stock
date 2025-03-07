@@ -3,13 +3,9 @@ import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-toastification'
 
-// 从window.APP_CONFIG中获取API地址
-const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
-console.log('API Base URL (request.js):', apiBaseUrl)
-
 // 创建axios实例
 const service = axios.create({
-    baseURL: apiBaseUrl,
+    baseURL: 'http://192.168.0.109:9099',
     timeout: 15000,
     withCredentials: true,
     headers: {
@@ -21,16 +17,13 @@ const service = axios.create({
 // 请求拦截器
 service.interceptors.request.use(
     config => {
-        // 确保URL使用完整路径
-        if (!config.url.startsWith('http')) {
-            config.url = `${apiBaseUrl}${config.url}`
-        }
-        console.log('发送请求 (request.js):', config.url, config)
-        
-        // 添加CORS相关头
-        config.headers['Access-Control-Allow-Origin'] = '*'
-        config.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        config.headers['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+        console.log('发送请求 (request.js):', {
+            method: config.method,
+            baseURL: config.baseURL,
+            url: config.url,
+            fullPath: `${config.baseURL}${config.url}`,
+            headers: config.headers
+        })
         
         const userStore = useUserStore()
         if (userStore.token) {
@@ -57,12 +50,7 @@ service.interceptors.request.use(
 service.interceptors.response.use(
     response => {
         console.log('响应成功 (request.js):', response)
-        const res = response.data
-        if (res.code && res.code !== 200) {
-            toast.error(res.message || '请求失败')
-            return Promise.reject(new Error(res.message || '请求失败'))
-        }
-        return res
+        return response.data
     },
     error => {
         console.error('响应错误 (request.js):', error)

@@ -24,10 +24,6 @@ const router = useRouter()
 onMounted(async () => {
   console.log('Welcome组件挂载，开始检查登录状态')
   
-  // 获取API基础URL
-  const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
-  console.log('当前API基础地址:', apiBaseUrl)
-  
   // 检查本地存储中的登录状态
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
   console.log('本地存储登录状态:', isLoggedIn)
@@ -41,17 +37,8 @@ onMounted(async () => {
   // 如果本地存储没有登录状态，尝试从API检查
   try {
     console.log('尝试从API检查登录状态')
-    // 使用完整的URL路径
-    const checkLoginUrl = `${apiBaseUrl}/api/auth/check_login`
-    console.log('检查登录URL:', checkLoginUrl)
-    const response = await request({
-      url: checkLoginUrl,
-      method: 'get',
-      withCredentials: true,
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    })
+    // 使用简单的get请求
+    const response = await request.get('/api/auth/check_login')
     console.log('API登录状态检查响应:', response)
     
     if (response.is_authenticated) {
@@ -69,7 +56,6 @@ onMounted(async () => {
     console.error('检查登录状态失败:', error)
     if (error.code === 'ERR_NETWORK') {
       console.error('网络连接失败，可能是后端服务未启动或网络问题')
-      console.error('尝试访问的地址:', apiBaseUrl)
     }
   }
 })
