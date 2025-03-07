@@ -16,7 +16,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import request from '../utils/request'
 
 const router = useRouter()
 
@@ -38,15 +38,15 @@ onMounted(async () => {
   // 如果本地存储没有登录状态，尝试从API检查
   try {
     console.log('尝试从API检查登录状态')
-    const response = await axios.get('/api/auth/check_login')
-    console.log('API登录状态检查响应:', response.data)
+    const response = await request.get('/api/auth/check_login')
+    console.log('API登录状态检查响应:', response)
     
-    if (response.data.is_authenticated) {
+    if (response.is_authenticated) {
       console.log('API确认用户已登录')
       localStorage.setItem('isLoggedIn', 'true')
-      if (response.data.user) {
-        console.log('存储用户信息:', response.data.user)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+      if (response.user) {
+        console.log('存储用户信息:', response.user)
+        localStorage.setItem('user', JSON.stringify(response.user))
       }
       console.log('准备跳转到首页')
       // 使用window.location.href进行完全刷新，确保导航栏正确显示

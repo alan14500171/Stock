@@ -61,7 +61,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import axios from 'axios'
+import request from '../utils/request'
 import { useMessage } from '../composables/useMessage'
 import { usePermissionStore } from '../stores/permission'
 
@@ -85,27 +85,22 @@ const handleLogin = async () => {
   
   try {
     console.log('开始登录请求...')
-    const response = await axios.post('/api/auth/login', {
+    const response = await request.post('/api/auth/login', {
       username: form.value.username,
       password: form.value.password
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
     })
     
-    console.log('登录响应:', response.data)
+    console.log('登录响应:', response)
     
-    if (response.data.success) {
+    if (response.success) {
       // 后端API返回成功但没有token，使用cookie-based认证
       message.success('登录成功')
       console.log('登录成功，准备跳转到:', route.query.redirect || '/home')
       
       // 存储用户信息
-      if (response.data.user) {
-        console.log('存储用户信息:', response.data.user)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+      if (response.user) {
+        console.log('存储用户信息:', response.user)
+        localStorage.setItem('user', JSON.stringify(response.user))
       }
       
       // 设置登录状态
