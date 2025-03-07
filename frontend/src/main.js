@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // 配置axios
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:9099'
+axios.defaults.baseURL = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
 axios.defaults.withCredentials = true
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
 
