@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -6,8 +6,8 @@ WORKDIR /app
 # 安装系统依赖和网络诊断工具
 RUN apt-get update && apt-get install -y \
     build-essential \
-    mariadb-client \
-    libmariadb-dev \
+    default-libmysqlclient-dev \
+    pkg-config \
     gcc \
     curl \
     iputils-ping \
