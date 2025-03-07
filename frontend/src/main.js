@@ -56,12 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // 配置axios
-axios.defaults.baseURL = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
+const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://192.168.0.109:9099'
+console.log('API Base URL:', apiBaseUrl)
+
+axios.defaults.baseURL = apiBaseUrl
 axios.defaults.withCredentials = true
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
+axios.defaults.headers.common['Access-Control-Allow-Origin'] = '*'
 
 // 添加请求拦截器
 axios.interceptors.request.use(config => {
+  console.log('发送请求:', config.url, config)
+  
   // 从localStorage获取token
   const token = localStorage.getItem('token')
   if (token) {
@@ -75,7 +81,26 @@ axios.interceptors.request.use(config => {
   }
   
   return config
+}, error => {
+  console.error('请求错误:', error)
+  return Promise.reject(error)
 })
+
+// 添加响应拦截器
+axios.interceptors.response.use(
+  response => {
+    console.log('响应成功:', response)
+    return response
+  },
+  error => {
+    console.error('响应错误:', error)
+    if (error.response) {
+      console.error('错误状态码:', error.response.status)
+      console.error('错误数据:', error.response.data)
+    }
+    return Promise.reject(error)
+  }
+)
 
 // 创建应用实例
 const app = createApp(App)
