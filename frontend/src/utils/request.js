@@ -3,7 +3,8 @@ import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-toastification'
 
-const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://192.168.0.109:9099'
+// 从window.APP_CONFIG中获取API地址
+const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
 console.log('API Base URL (request.js):', apiBaseUrl)
 
 // 创建axios实例
@@ -13,7 +14,7 @@ const service = axios.create({
     withCredentials: true,
     headers: {
         'X-Requested-With': 'XMLHttpRequest',
-        'Access-Control-Allow-Origin': '*'
+        'Content-Type': 'application/json',
     }
 })
 
@@ -21,10 +22,25 @@ const service = axios.create({
 service.interceptors.request.use(
     config => {
         console.log('发送请求 (request.js):', config.url, config)
+        
+        // 添加CORS相关头
+        config.headers['Access-Control-Allow-Origin'] = '*'
+        config.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        config.headers['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+        
         const userStore = useUserStore()
         if (userStore.token) {
             config.headers['Authorization'] = `Bearer ${userStore.token}`
         }
+        
+        // 添加时间戳防止缓存
+        if (config.method === 'get') {
+            config.params = {
+                ...config.params,
+                _t: new Date().getTime()
+            }
+        }
+        
         return config
     },
     error => {
@@ -49,11 +65,9 @@ service.interceptors.response.use(
         if (error.response) {
             console.error('错误状态码:', error.response.status)
             console.error('错误数据:', error.response.data)
-        }
-        
-        const router = useRouter()
-        
-        if (error.response) {
+            
+            const router = useRouter()
+            
             switch (error.response.status) {
                 case 401:
                     toast.error('未登录或登录已过期')
@@ -71,8 +85,10 @@ service.interceptors.response.use(
                 default:
                     toast.error(error.message || '请求失败')
             }
+        } else if (error.code === 'ERR_NETWORK') {
+            toast.error('网络连接失败，请检查网络设置')
         } else {
-            toast.error('网络错误，请检查网络连接')
+            toast.error('请求失败，请稍后重试')
         }
         
         return Promise.reject(error)

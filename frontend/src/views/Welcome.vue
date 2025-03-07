@@ -30,8 +30,8 @@ onMounted(async () => {
   
   if (isLoggedIn) {
     console.log('用户已登录，准备跳转到首页')
-    // 使用window.location.href进行完全刷新，确保导航栏正确显示
-    window.location.href = '/home'
+    // 使用router.push代替window.location.href
+    router.push('/home')
     return
   }
   
@@ -48,14 +48,16 @@ onMounted(async () => {
         console.log('存储用户信息:', response.user)
         localStorage.setItem('user', JSON.stringify(response.user))
       }
-      console.log('准备跳转到首页')
-      // 使用window.location.href进行完全刷新，确保导航栏正确显示
-      window.location.href = '/home'
+      // 使用router.push代替window.location.href
+      router.push('/home')
     } else {
       console.log('API确认用户未登录')
     }
   } catch (error) {
     console.error('检查登录状态失败:', error)
+    if (error.code === 'ERR_NETWORK') {
+      console.error('网络连接失败，可能是后端服务未启动或网络问题')
+    }
   }
 })
 </script>

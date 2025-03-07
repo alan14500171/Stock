@@ -56,17 +56,23 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // 配置axios
-const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://192.168.0.109:9099'
-console.log('API Base URL:', apiBaseUrl)
+const apiBaseUrl = window.APP_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL
+console.log('API Base URL (main.js):', apiBaseUrl)
 
-axios.defaults.baseURL = apiBaseUrl
-axios.defaults.withCredentials = true
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest'
-axios.defaults.headers.common['Access-Control-Allow-Origin'] = '*'
+// 创建axios实例
+const axiosInstance = axios.create({
+  baseURL: apiBaseUrl,
+  timeout: 15000,
+  withCredentials: true,
+  headers: {
+    'X-Requested-With': 'XMLHttpRequest',
+    'Content-Type': 'application/json',
+  }
+})
 
-// 添加请求拦截器
-axios.interceptors.request.use(config => {
-  console.log('发送请求:', config.url, config)
+// 请求拦截器
+axiosInstance.interceptors.request.use(config => {
+  console.log('发送请求 (main.js):', config.url, config)
   
   // 从localStorage获取token
   const token = localStorage.getItem('token')
@@ -82,18 +88,18 @@ axios.interceptors.request.use(config => {
   
   return config
 }, error => {
-  console.error('请求错误:', error)
+  console.error('请求错误 (main.js):', error)
   return Promise.reject(error)
 })
 
-// 添加响应拦截器
-axios.interceptors.response.use(
+// 响应拦截器
+axiosInstance.interceptors.response.use(
   response => {
-    console.log('响应成功:', response)
+    console.log('响应成功 (main.js):', response)
     return response
   },
   error => {
-    console.error('响应错误:', error)
+    console.error('响应错误 (main.js):', error)
     if (error.response) {
       console.error('错误状态码:', error.response.status)
       console.error('错误数据:', error.response.data)
@@ -111,7 +117,7 @@ app.use(ElementPlus, {
 })
 
 // 注册全局属性
-app.config.globalProperties.$axios = axios
+app.config.globalProperties.$axios = axiosInstance
 app.config.globalProperties.$bootstrap = bootstrap
 
 // 注册Pinia
