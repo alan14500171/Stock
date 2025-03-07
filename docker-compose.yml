@@ -15,7 +15,7 @@ services:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Shanghai
-    network_mode: "host"
+    network_mode: "bridge"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9099/api/health"]
       interval: 30s
@@ -38,7 +38,7 @@ services:
       - TZ=Asia/Shanghai
     depends_on:
       - backend
-    network_mode: "host"
+    network_mode: "bridge"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
@@ -61,6 +61,8 @@ services:
       - mysql_data:/var/lib/mysql
       - ./backend/docker/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
     mem_limit: 512M
+    network_mode: "bridge"
 
 volumes:
   mysql_data:
+    driver: local
