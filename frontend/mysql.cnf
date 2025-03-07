@@ -1,0 +1,35 @@
+[mysqld]
+# 字符集设置
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+character-set-client-handshake = FALSE
+init_connect='SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci'
+default_collation_for_utf8mb4 = utf8mb4_unicode_ci
+
+# 连接和超时设置
+max_connections = 200
+wait_timeout = 28800
+interactive_timeout = 28800
+connect_timeout = 10
+max_allowed_packet = 16M
+
+# 连接池优化
+thread_cache_size = 10
+max_user_connections = 150
+
+# 日志设置
+slow_query_log = 1
+long_query_time = 2
+
+# InnoDB 设置
+innodb_buffer_pool_size = 256M
+innodb_flush_log_at_trx_commit = 2
+innodb_file_per_table = 1
+innodb_flush_method = O_DIRECT
+innodb_log_buffer_size = 16M
+
+[client]
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4 
