@@ -25,22 +25,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONFAULTHANDLER=1
 
+# 创建必要的目录并设置权限
+RUN mkdir -p /app/logs /app/config && \
+    chmod 777 /app/logs && \
+    chmod 755 /app/config
+
 # 复制依赖文件
 COPY requirements.txt .
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 创建必要的目录
-RUN mkdir -p /app/logs && \
-    mkdir -p /app/config && \
-    chmod 777 /app/logs
-
 # 复制应用代码
 COPY . .
 
 # 确保脚本可执行
-RUN chmod +x /app/container_start.sh
+RUN chmod +x container_start.sh
 
 # 暴露端口
 EXPOSE 9099
@@ -50,4 +50,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:9099/api/health || exit 1
 
 # 启动应用
-CMD ["/app/container_start.sh"] 
+CMD ["./container_start.sh"] 

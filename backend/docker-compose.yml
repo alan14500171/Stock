@@ -13,8 +13,6 @@ services:
       - "9099:9099"
     volumes:
       - .:/app
-      - ./logs:/app/logs
-      - ./config:/app/config
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
