@@ -5,7 +5,7 @@ import { useToast } from 'vue-toastification'
 
 // 创建axios实例
 const service = axios.create({
-    baseURL: 'http://192.168.0.109:9099',
+    baseURL: window.APP_CONFIG?.API_BASE_URL || window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':9099' : '/api'),
     timeout: 15000,
     withCredentials: true,
     headers: {
