@@ -15,16 +15,19 @@ services:
       - ./nginx-synology.conf:/etc/nginx/conf.d/default.conf
     environment:
       - TZ=Asia/Shanghai
+      - BACKEND_API_URL=http://stock-backend:9099/
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-    mem_limit: 512M
     networks:
       - stock-network
+      - stock-backend_stock-network
 
 networks:
   stock-network:
-    driver: bridge 
+    driver: bridge
+  stock-backend_stock-network:
+    external: true 
