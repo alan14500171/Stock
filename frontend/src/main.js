@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 配置axios
 const axiosInstance = axios.create({
-  baseURL: window.APP_CONFIG?.API_BASE_URL || window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':9099' : '/api'),
+  baseURL: window.APP_CONFIG?.API_BASE_URL || window.location.origin + '/api',
   timeout: 15000,
   withCredentials: true,
   headers: {
